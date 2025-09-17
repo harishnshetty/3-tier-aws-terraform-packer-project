@@ -1,0 +1,30 @@
+{
+  "variables": {
+    "aws_region": "ap-south-1"
+  },
+  "builders": [
+    {
+      "type": "amazon-ebs",
+      "region": "{{user `aws_region`}}",
+      "source_ami": "ami-0533167fcff018a86",   
+      "ssh_username": "ec2-user",
+      "ami_name": "three-tier-frontend-{{timestamp}}",
+      "ami_description": "Custom frontend AMI with Nginx",
+      "tags": {
+        "Project": "three-tier",
+        "Tier": "frontend"
+      }
+    }
+  ],
+  "provisioners": [
+    {
+      "type": "shell",
+      "inline": [
+        "sudo yum update -y",
+        "sudo amazon-linux-extras enable nginx1 -y || true",
+        "sudo yum install -y nginx git",
+        "sudo systemctl enable nginx"
+      ]
+    }
+  ]
+}
