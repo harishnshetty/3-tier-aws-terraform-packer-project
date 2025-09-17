@@ -432,10 +432,13 @@
         </div>
     </div>
 
+    <!-- Load config first -->
+    <script src="config.php"></script>
+
     <script>
-        const APP_ALB_DNS = '<?php echo getenv("APP_ALB_DNS") ?: "localhost"; ?>';
-        const PROJECT_NAME = '<?php echo getenv("PROJECT_NAME") ?: "three-tier-app"; ?>';
-        const ENVIRONMENT = '<?php echo getenv("ENVIRONMENT") ?: "development"; ?>';
+        const APP_ALB_DNS = window.APP_ALB_DNS || "localhost";
+        const PROJECT_NAME = window.PROJECT_NAME || "three-tier-app";
+        const ENVIRONMENT = window.ENVIRONMENT || "development";
 
         async function checkHealth() {
             try {
@@ -449,7 +452,7 @@
                 document.getElementById('loadBalancer').textContent = window.location.hostname;
 
                 // Check backend health
-                const backendResponse = await fetch(`http://${APP_ALB_DNS}/api/health`);
+                const backendResponse = await fetch(`${APP_ALB_DNS}/api/health`);
                 const backendData = await backendResponse.json();
                 
                 document.getElementById('backendStatus').className = 'status healthy';
@@ -471,7 +474,7 @@
 
         async function testBackend() {
             try {
-                const response = await fetch(`http://${APP_ALB_DNS}/api/test`);
+                const response = await fetch(`${APP_ALB_DNS}/api/test`);
                 const data = await response.json();
                 document.getElementById('apiResponse').textContent = JSON.stringify(data, null, 2);
             } catch (error) {
@@ -481,7 +484,7 @@
 
         async function testDatabase() {
             try {
-                const response = await fetch(`http://${APP_ALB_DNS}/api/db-test`);
+                const response = await fetch(`${APP_ALB_DNS}/api/db-test`);
                 const data = await response.json();
                 document.getElementById('apiResponse').textContent = JSON.stringify(data, null, 2);
                 document.getElementById('databaseStatus').textContent = data.status === 'success' ? '✅ Connected' : '❌ Disconnected';
@@ -499,7 +502,7 @@
             const messageDiv = document.getElementById('formMessage');
 
             try {
-                const response = await fetch(`http://${APP_ALB_DNS}/api/users`, {
+                const response = await fetch(`${APP_ALB_DNS}/api/users`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name, email })
@@ -530,7 +533,7 @@
             const description = document.getElementById('productDescription').value;
 
             try {
-                const response = await fetch(`http://${APP_ALB_DNS}/api/products`, {
+                const response = await fetch(`${APP_ALB_DNS}/api/products`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name, price: parseFloat(price), description })
@@ -549,7 +552,7 @@
             dataList.innerHTML = '<div class="loading">Loading users...</div>';
 
             try {
-                const response = await fetch(`http://${APP_ALB_DNS}/api/users`);
+                const response = await fetch(`${APP_ALB_DNS}/api/users`);
                 const data = await response.json();
 
                 if (data.status === 'success') {
@@ -575,7 +578,7 @@
             dataList.innerHTML = '<div class="loading">Loading products...</div>';
 
             try {
-                const response = await fetch(`http://${APP_ALB_DNS}/api/products`);
+                const response = await fetch(`${APP_ALB_DNS}/api/products`);
                 const data = await response.json();
 
                 if (data.status === 'success') {
@@ -601,7 +604,7 @@
             dataList.innerHTML = '<div class="loading">Loading orders...</div>';
 
             try {
-                const response = await fetch(`http://${APP_ALB_DNS}/api/orders`);
+                const response = await fetch(`${APP_ALB_DNS}/api/orders`);
                 const data = await response.json();
 
                 if (data.status === 'success') {
@@ -629,5 +632,6 @@
             setInterval(checkHealth, 30000);
         });
     </script>
+
 </body>
 </html>

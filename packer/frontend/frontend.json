@@ -6,10 +6,11 @@
     {
       "type": "amazon-ebs",
       "region": "{{user `aws_region`}}",
-      "source_ami": "ami-0533167fcff018a86",   
+      "source_ami": "ami-01b6d88af12965bb6",
+      "instance_type": "t2.micro",
       "ssh_username": "ec2-user",
       "ami_name": "three-tier-frontend-{{timestamp}}",
-      "ami_description": "Custom frontend AMI with Nginx",
+      "ami_description": "Custom frontend AMI with Nginx + PHP (Amazon Linux 2023)",
       "tags": {
         "Project": "three-tier",
         "Tier": "frontend"
@@ -20,10 +21,11 @@
     {
       "type": "shell",
       "inline": [
-        "sudo yum update -y",
-        "sudo amazon-linux-extras enable nginx1 -y || true",
-        "sudo yum install -y nginx git",
-        "sudo systemctl enable nginx"
+        "set -e",
+        "sudo dnf update -y",
+        "sudo dnf install -y nginx git php php-fpm php-mysqlnd php-json",
+        "sudo systemctl enable nginx",
+        "sudo systemctl enable php-fpm"
       ]
     }
   ]

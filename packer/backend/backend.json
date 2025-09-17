@@ -6,7 +6,7 @@
     {
       "type": "amazon-ebs",
       "region": "{{user `aws_region`}}",
-      "source_ami": "ami-0533167fcff018a86",   
+      "source_ami": "ami-01b6d88af12965bb6",
       "instance_type": "t3.micro",
       "ssh_username": "ec2-user",
       "ami_name": "three-tier-backend-{{timestamp}}",
@@ -21,9 +21,9 @@
     {
       "type": "shell",
       "inline": [
-        "sudo yum update -y",
-        "amazon-linux-extras enable php8.0 -y || true",
-        "sudo yum install -y php php-mysqlnd php-json git httpd composer",
+        "set -e",
+        "sudo dnf update -y",
+        "sudo dnf install -y php php-mysqlnd php-json git httpd composer",
         "sudo systemctl enable httpd"
       ]
     }
