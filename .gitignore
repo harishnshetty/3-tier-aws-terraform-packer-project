@@ -1,0 +1,48 @@
+# Terraform
+
+# Ignore all Terraform plugin binaries and cache
+
+**/.terraform/*
+
+**/.terraform/
+**/terraform.tfstate
+**/terraform.tfstate.*
+**/terraform.tfplan
+**/.terraform.lock.hcl
+/terraform/network/.terraform/providers/registry.terraform.io/hashicorp/aws/6.13.0/linux_amd64/terraform-provider-aws_v6.13.0_x5
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.terraform/
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraform.lock.hcl
+
+#
+# Packer
+packer/**/*.log
+packer/**/*.iso
+packer/**/*.box
+packer/**/*.vagrant
+#
+# OS or Editor specific
+.DS_Store
+
+*.swp
+*.swo
+*.idea/
+
+*.bak
+
+# Backup files
+*.backup
+*~
+*.tmp
+
+
+
+# Logs
+*.log
