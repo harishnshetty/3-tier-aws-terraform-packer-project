@@ -23,6 +23,7 @@
       "inline": [
         "set -e",
         "sudo dnf update -y",
+        "sudo amazon-linux-extras enable php8.0",
         "sudo dnf install -y nginx git php php-fpm php-mysqlnd php-json",
         "sudo systemctl enable nginx",
         "sudo systemctl enable php-fpm"

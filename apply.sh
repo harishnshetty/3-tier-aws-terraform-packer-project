@@ -123,5 +123,13 @@ cd ../..
 # ================================================================
 # Done
 # ================================================================
+
+echo "╔══════════════════ Stay Connected ═════════════════════════════╗"
+echo "║ 🎥  YouTube:   https://www.youtube.com/@devopsharishnshetty   ║"
+echo "║ 📁  Projects:  https://harishnshetty.github.io/projects.html  ║"
+echo "║ 👔  LinkedIn:  https://in.linkedin.com/in/harishnshetty       ║"
+echo "║ 🐱  GitHub:    https://github.com/harishnshetty               ║"
+echo "╚═══════════════════════════════════════════════════════════════╝"
+
 print_section "Infrastructure setup completed successfully!"
 echo "🌍 Access your application at the Web ALB DNS name shown in compute outputs."
