@@ -34,6 +34,13 @@ output "rds_database_name" {
   value       = aws_db_instance.main.db_name
 }
 
+
+output "rds_address" {
+  description = "The address of the RDS instance"
+  value       = aws_db_instance.main.address
+}
+
+
 ##############################################
 # Metadata Outputs
 ##############################################
@@ -61,3 +68,4 @@ output "db_subnet_group_name" {
   description = "The name of the DB subnet group"
   value       = aws_db_subnet_group.main.name
 }
+

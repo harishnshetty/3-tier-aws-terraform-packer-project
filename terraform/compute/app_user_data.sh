@@ -30,7 +30,37 @@ if [ -f /var/www/html/composer.json ]; then
     composer install --no-dev --optimize-autoloader
 fi
 
+# Copy SQL file for database initialization
+cp /tmp/3-tier-aws-terraform-packer-project/packer/backend/appdb.sql /tmp/appdb.sql
 
+# Database initialization function
+initialize_database() {
+    echo "🔄 Initializing database..."
+    
+    # Database connection parameters (passed from Terraform)
+    DB_HOST="${db_host}"
+    DB_NAME="${db_name}"
+    DB_USER="${db_user}"
+    DB_PASSWORD="${db_password}"
+    
+    # Wait for RDS to be ready
+    echo "⏳ Waiting for RDS to be available..."
+    until mysql -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASSWORD" -e "SELECT 1" 2>/dev/null; do
+        echo "📡 Database not ready yet, retrying in 10 seconds..."
+        sleep 10
+    done
+    
+    echo "✅ Database connection successful!"
+    
+    # Import the SQL schema
+    echo "📦 Importing database schema..."
+    mysql -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASSWORD" < /tmp/appdb.sql
+    
+    echo "🎉 Database initialization complete!"
+}
+
+# Run database initialization in background (non-blocking)
+initialize_database &
 
 # Apache vhost for the app
 cat > /etc/httpd/conf.d/app.conf <<EOL
