@@ -7,7 +7,7 @@ yum install -y git nginx
 # Clone the repo
 cd /tmp
 rm -rf 3-tier-terraform-packer-project
-git clone https://github.com/harishnshetty/3-tier-terraform-packer-project.git
+git clone https://github.com/harishnshetty/3-tier-aws-terraform-packer-project.git
 
 # Deploy frontend files
 cp -r 3-tier-terraform-packer-project/application_code/web_files/* /var/www/html/

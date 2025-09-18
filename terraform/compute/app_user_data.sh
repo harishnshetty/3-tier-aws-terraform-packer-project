@@ -12,7 +12,7 @@ systemctl start httpd
 # Clone the repo
 cd /tmp
 rm -rf 3-tier-terraform-packer-project
-git clone https://github.com/harishnshetty/3-tier-terraform-packer-project.git
+git clone https://github.com/harishnshetty/3-tier-aws-terraform-packer-project.git
 
 # Deploy backend PHP app directly to /var/www/html
 rm -rf /var/www/html/*
