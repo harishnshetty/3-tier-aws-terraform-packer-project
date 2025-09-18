@@ -1,3 +1,19 @@
+resource "null_resource" "db_schema" {
+  depends_on = [aws_autoscaling_group.app] # ensure app + RDS exist
+
+  provisioner "local-exec" {
+    command = <<EOT
+mysql --host=${data.terraform_remote_state.database.outputs.rds_address} \
+      --user=${data.terraform_remote_state.database.outputs.rds_username} \
+      --password=${var.db_password} \
+      ${data.terraform_remote_state.database.outputs.rds_database_name} \
+      < ${path.module}/../../application_code/app_files/appdb.sql
+EOT
+  }
+}
+
+
+
 ##############################################
 # Web Application Load Balancer (Internet-facing)
 ##############################################
