@@ -6,14 +6,15 @@
     {
       "type": "amazon-ebs",
       "region": "{{user `aws_region`}}",
-      "source_ami": "ami-01b6d88af12965bb6",
+      "source_ami": "ami-0533167fcff018a86",
       "instance_type": "t3.micro",
       "ssh_username": "ec2-user",
-      "ami_name": "three-tier-backend-{{timestamp}}",
-      "ami_description": "Custom backend AMI with Apache, PHP, Composer",
+      "ami_name": "three-tier-backend-al2023-{{timestamp}}",
+      "ami_description": "Custom backend AMI with Apache, PHP, Composer on Amazon Linux 2023",
       "tags": {
         "Project": "three-tier",
-        "Tier": "backend"
+        "Tier": "backend",
+        "Base_AMI": "amazon-linux-2023-kernel-6.1"
       }
     }
   ],
@@ -24,8 +25,11 @@
         "set -e",
         "echo '📦 Updating system and installing required packages...'",
         "sudo dnf update -y",
-        "sudo dnf install -y php php-mysqlnd php-json git httpd composer wget mysql80-community-release-el9-1.noarch.rpm mysql-community-client",
+        "sudo dnf install -y php php-mysqlnd php-json git httpd composer wget ",
+        "sudo wget https://dev.mysql.com/get/mysql80-community-release-el9-1.noarch.rpm",
+        "sudo dnf install mysql80-community-release-el9-1.noarch.rpm -y",
         "sudo rpm --import https://repo.mysql.com/RPM-GPG-KEY-mysql-2023",
+        "sudo dnf install -y mysql-community-client",
         "sudo systemctl enable httpd",
         "sudo systemctl enable php-fpm"
       ]
