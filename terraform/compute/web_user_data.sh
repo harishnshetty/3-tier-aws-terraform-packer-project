@@ -29,16 +29,21 @@ cat > /etc/httpd/conf.d/frontend.conf << EOF
     SetEnv PROJECT_NAME ${project_name}
     SetEnv ENVIRONMENT ${environment}
 
-    # Proxy API requests to backend ALB
-    ProxyPass /api/ http://${app_alb_dns}/
-    ProxyPassReverse /api/ http://${app_alb_dns}/
+    # Proxy API requests to backend ALB - FIXED CONFIGURATION
+    ProxyPass /api/ http://${app_alb_dns}/api/
+    ProxyPassReverse /api/ http://${app_alb_dns}/api/
     
-    # PHP configuration
+    # Handle PHP files
     <FilesMatch \.php$>
         SetHandler "proxy:fcgi://127.0.0.1:9000"
     </FilesMatch>
 </VirtualHost>
 EOF
+
+# Enable proxy modules
+echo "LoadModule proxy_module modules/mod_proxy.so" >> /etc/httpd/conf.modules.d/00-proxy.conf
+echo "LoadModule proxy_http_module modules/mod_proxy_http.so" >> /etc/httpd/conf.modules.d/00-proxy.conf
+echo "LoadModule proxy_fcgi_module modules/mod_proxy_fcgi.so" >> /etc/httpd/conf.modules.d/00-proxy.conf
 
 # Set proper permissions
 chown -R apache:apache /var/www/html
