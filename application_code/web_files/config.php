@@ -1,4 +1,4 @@
-<?php
+<!-- <?php
 header("Content-Type: application/javascript");
 header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: GET");
@@ -17,4 +17,4 @@ if (!empty($alb) && strpos($alb, 'http') !== 0) {
 echo "window.APP_ALB_DNS = \"" . addslashes($alb) . "\";\n";
 echo "window.PROJECT_NAME = \"" . addslashes($project) . "\";\n";
 echo "window.ENVIRONMENT = \"" . addslashes($env) . "\";\n";
-?>
+?> -->
