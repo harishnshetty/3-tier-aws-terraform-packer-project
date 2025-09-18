@@ -6,11 +6,11 @@ yum install -y git nginx
 
 # Clone the repo
 cd /tmp
-rm -rf 3-tier-terraform-packer-project
+rm -rf 3-tier-aws-terraform-packer-project
 git clone https://github.com/harishnshetty/3-tier-aws-terraform-packer-project.git
 
 # Deploy frontend files
-cp -r 3-tier-terraform-packer-project/application_code/web_files/* /var/www/html/
+cp -r 3-tier-aws-terraform-packer-project/application_code/web_files/* /var/www/html/
 
 # Configure Nginx to serve frontend + proxy API to backend ALB
 cat > /etc/nginx/nginx.conf <<EOF
