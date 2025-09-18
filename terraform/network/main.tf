@@ -541,6 +541,12 @@ resource "aws_security_group" "app-sg" {
     security_groups = [aws_security_group.backend_alb_sg.id]
   }
 
+  ingress {
+    from_port       = 22
+    to_port         = 22
+    protocol        = "tcp"
+    security_groups = [aws_security_group.app-sg.id]
+  }
   egress {
     from_port   = 0
     to_port     = 0
