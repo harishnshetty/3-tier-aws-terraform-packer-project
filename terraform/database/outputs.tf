@@ -35,11 +35,6 @@ output "rds_database_name" {
 }
 
 
-output "rds_address" {
-  description = "The address of the RDS instance"
-  value       = aws_db_instance.main.address
-}
-
 
 ##############################################
 # Metadata Outputs

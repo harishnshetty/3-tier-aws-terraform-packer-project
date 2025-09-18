@@ -1,5 +1,3 @@
-
-
 ##############################################
 # Web Application Load Balancer (Internet-facing)
 ##############################################
@@ -197,24 +195,14 @@ resource "aws_launch_template" "app" {
     security_groups             = [data.terraform_remote_state.network.outputs.app_sg_id]
   }
 
-  # user_data = base64encode(templatefile("${path.module}/app_user_data.sh", {
-  #   project_name = var.project_name
-  #   db_host      = data.terraform_remote_state.database.outputs.rds_address
-  #   db_username  = data.terraform_remote_state.database.outputs.rds_username
-  #   db_password  = var.db_password
-  #   db_name      = data.terraform_remote_state.database.outputs.rds_database_name
-  #   environment  = var.environment
-  # }))
-
   user_data = base64encode(templatefile("${path.module}/app_user_data.sh", {
-  project_name = var.project_name
-  db_host      = data.terraform_remote_state.database.outputs.rds_address
-  db_username  = data.terraform_remote_state.database.outputs.rds_username
-  db_password  = data.terraform_remote_state.database.outputs.rds_password
-  db_name      = data.terraform_remote_state.database.outputs.rds_database_name
-  environment  = var.environment
-}))
-
+    project_name = var.project_name
+    db_host      = data.terraform_remote_state.database.outputs.rds_address
+    db_user      = data.terraform_remote_state.database.outputs.rds_username
+    db_password  = var.db_password
+    db_name      = data.terraform_remote_state.database.outputs.rds_database_name
+    environment  = var.environment
+  }))
 
   tag_specifications {
     resource_type = "instance"
@@ -225,6 +213,9 @@ resource "aws_launch_template" "app" {
       Tier        = "app"
     }
   }
+
+  # Add depends_on at the launch template level
+  depends_on = [data.terraform_remote_state.database]
 }
 
 resource "aws_autoscaling_group" "app" {
@@ -256,8 +247,7 @@ resource "aws_autoscaling_group" "app" {
     value               = var.environment
     propagate_at_launch = true
   }
+
+  # Ensure RDS is ready before launching instances
+  depends_on = [data.terraform_remote_state.database]
 }
-
-
-
-##############################################
