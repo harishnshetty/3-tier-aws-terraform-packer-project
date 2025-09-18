@@ -440,37 +440,46 @@
         const PROJECT_NAME = window.PROJECT_NAME || "three-tier-app";
         const ENVIRONMENT = window.ENVIRONMENT || "development";
 
-        async function checkHealth() {
-            try {
-                // Check frontend health
-                const frontendResponse = await fetch('/health.php');
-                const frontendData = await frontendResponse.json();
-                
-                document.getElementById('frontendStatus').className = 'status healthy';
-                document.getElementById('frontendStatus').textContent = '✅ Healthy';
-                document.getElementById('frontendServer').textContent = frontendData.server;
-                document.getElementById('loadBalancer').textContent = window.location.hostname;
+async function checkHealth() {
+    try {
+        // Check frontend health
+        const frontendResponse = await fetch('/health.php');
+        const frontendData = await frontendResponse.json();
+        
+        document.getElementById('frontendStatus').className = 'status healthy';
+        document.getElementById('frontendStatus').textContent = '✅ Healthy';
+        document.getElementById('frontendServer').textContent = frontendData.server;
+        document.getElementById('loadBalancer').textContent = window.location.hostname;
 
-                // Check backend health
-                const backendResponse = await fetch(`${APP_ALB_DNS}/api/health`);
+        // Check backend health with error handling
+        try {
+            const backendResponse = await fetch(`${APP_ALB_DNS}/api/health`);
+            if (backendResponse.headers.get('content-type')?.includes('application/json')) {
                 const backendData = await backendResponse.json();
-                
                 document.getElementById('backendStatus').className = 'status healthy';
                 document.getElementById('backendStatus').textContent = '✅ Healthy';
                 document.getElementById('backendServer').textContent = backendData.server;
-
-                // Update system info
-                document.getElementById('environment').textContent = ENVIRONMENT;
-                document.getElementById('projectName').textContent = PROJECT_NAME;
-                document.getElementById('frontendInstances').textContent = '2+ (Auto Scaling)';
-                document.getElementById('backendInstances').textContent = '2+ (Auto Scaling)';
-
-            } catch (error) {
-                document.getElementById('backendStatus').className = 'status error';
-                document.getElementById('backendStatus').textContent = '❌ Backend Unavailable';
-                console.error('Health check failed:', error);
+            } else {
+                throw new Error('Backend returned non-JSON response');
             }
+        } catch (backendError) {
+            document.getElementById('backendStatus').className = 'status error';
+            document.getElementById('backendStatus').textContent = '❌ Backend Error';
+            console.error('Backend health check failed:', backendError);
         }
+
+        // Update system info
+        document.getElementById('environment').textContent = ENVIRONMENT;
+        document.getElementById('projectName').textContent = PROJECT_NAME;
+        document.getElementById('frontendInstances').textContent = '2+ (Auto Scaling)';
+        document.getElementById('backendInstances').textContent = '2+ (Auto Scaling)';
+
+    } catch (error) {
+        document.getElementById('frontendStatus').className = 'status error';
+        document.getElementById('frontendStatus').textContent = '❌ Frontend Error';
+        console.error('Frontend health check failed:', error);
+    }
+}
 
         async function testBackend() {
             try {
