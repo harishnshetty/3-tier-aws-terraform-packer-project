@@ -3,7 +3,7 @@ set -e
 
 # Update and install dependencies
 dnf update -y
-dnf install -y php php-mysqlnd php-json git httpd composer
+dnf install -y php php-mysqlnd php-json php-pdo git httpd composer
 
 # Enable and start Apache
 systemctl enable httpd
@@ -31,7 +31,7 @@ cp /tmp/3-tier-aws-terraform-packer-project/packer/backend/appdb.sql /tmp/appdb.
 initialize_database() {
     echo "🔄 Initializing database..."
     
-    # Database connection parameters
+    # Database connection parameters (from Terraform template)
     DB_HOST="${db_host}"
     DB_NAME="${db_name}"
     DB_USER="${db_user}"
@@ -64,25 +64,92 @@ initialize_database() {
 # Run database initialization (in foreground)
 initialize_database
 
-# Install PHP dependencies if composer.json exists (FIXED - run as ec2-user)
-if [ -f /var/www/html/composer.json ]; then
-    echo "📦 Installing PHP dependencies..."
-    # Run composer as ec2-user with proper environment
-    sudo -u ec2-user bash -c "cd /var/www/html && COMPOSER_ALLOW_SUPERUSER=1 composer install --no-dev --optimize-autoloader"
-fi
-
-# Apache vhost for the app
-cat > /etc/httpd/conf.d/app.conf <<EOL
+# Configure Apache with environment variables
+echo "📝 Configuring Apache environment..."
+cat > /etc/httpd/conf.d/app.conf << EOL
 <VirtualHost *:80>
     DocumentRoot /var/www/html
     <Directory /var/www/html>
         AllowOverride All
         Require all granted
+        FallbackResource /index.php
     </Directory>
+
+    # Pass environment variables from Terraform
+    SetEnv DB_HOST ${db_host}
+    SetEnv DB_USERNAME ${db_user}
+    SetEnv DB_PASSWORD ${db_password}
+    SetEnv DB_NAME ${db_name}
+    SetEnv ENVIRONMENT ${environment}
+    SetEnv PROJECT_NAME ${project_name}
+
+    # Enable rewrite engine for clean URLs
+    <IfModule mod_rewrite.c>
+        RewriteEngine On
+        RewriteCond %{REQUEST_FILENAME} !-f
+        RewriteCond %{REQUEST_FILENAME} !-d
+        RewriteRule ^(.*)$ /index.php [QSA,L]
+    </IfModule>
 </VirtualHost>
 EOL
 
-# Restart Apache
+# Also create .env file as backup
+echo "📝 Creating .env file..."
+cat > /var/www/html/.env << EOL
+DB_HOST=${db_host}
+DB_USERNAME=${db_user}
+DB_PASSWORD=${db_password}
+DB_NAME=${db_name}
+ENVIRONMENT=${environment}
+PROJECT_NAME=${project_name}
+EOL
+
+# Set proper permissions
+chown apache:apache /var/www/html/.env
+chmod 640 /var/www/html/.env
+
+# Install PHP dependencies if composer.json exists (safe method)
+if [ -f /var/www/html/composer.json ]; then
+    echo "📦 Installing PHP dependencies..."
+    # Set proper home directory for composer
+    export HOME=/home/ec2-user
+    export COMPOSER_HOME=/home/ec2-user/.composer
+    mkdir -p $COMPOSER_HOME
+    chown ec2-user:ec2-user $COMPOSER_HOME
+    
+    # Run composer as ec2-user
+    sudo -u ec2-user bash -c "
+        cd /var/www/html
+        export COMPOSER_ALLOW_SUPERUSER=1
+        composer install --no-dev --optimize-autoloader --no-interaction
+    "
+fi
+
+# Restart Apache to apply all configurations
+echo "🔄 Restarting Apache..."
 systemctl restart httpd
 
-echo "✅ Backend setup complete!"
+# Test the configuration
+echo "🧪 Testing API configuration..."
+sleep 5
+
+# Test health endpoint
+if curl -s http://localhost/api/health > /dev/null; then
+    echo "✅ API health check passed!"
+else
+    echo "❌ API health check failed!"
+    echo "Checking Apache error logs:"
+    tail -20 /var/log/httpd/error_log
+fi
+
+# Test database connection through API
+if curl -s http://localhost/api/db-test > /dev/null; then
+    echo "✅ Database connection test passed!"
+else
+    echo "⚠️ Database connection test may have failed (check API)"
+fi
+
+echo "🎉 Backend setup completed successfully!"
+echo "🌐 Server: $(hostname)"
+echo "📊 Environment: ${environment}"
+echo "🏷️ Project: ${project_name}"
