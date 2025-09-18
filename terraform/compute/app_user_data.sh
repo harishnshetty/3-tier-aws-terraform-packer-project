@@ -65,6 +65,7 @@ initialize_database() {
 initialize_database
 
 # Configure Apache with environment variables
+# Configure Apache with environment variables
 echo "📝 Configuring Apache environment..."
 cat > /etc/httpd/conf.d/app.conf << 'EOL'
 <VirtualHost *:80>
@@ -72,6 +73,7 @@ cat > /etc/httpd/conf.d/app.conf << 'EOL'
     <Directory /var/www/html>
         AllowOverride All
         Require all granted
+        # Use FallbackResource instead of complex rewrite rules
         FallbackResource /index.php
     </Directory>
 
@@ -82,14 +84,6 @@ cat > /etc/httpd/conf.d/app.conf << 'EOL'
     SetEnv DB_NAME ${db_name}
     SetEnv ENVIRONMENT ${environment}
     SetEnv PROJECT_NAME ${project_name}
-
-    # Enable rewrite engine for clean URLs
-    <IfModule mod_rewrite.c>
-        RewriteEngine On
-        RewriteCond %{25}REQUEST_FILENAME !-f
-        RewriteCond %{25}REQUEST_FILENAME !-d
-        RewriteRule ^(.*)$ /index.php [QSA,L]
-    </IfModule>
 </VirtualHost>
 EOL
 
