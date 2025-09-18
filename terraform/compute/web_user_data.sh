@@ -1,9 +1,9 @@
 #!/bin/bash
 set -e
 
-# Update and install Apache + PHP (PHP is needed for health.php, config.php, test-php.php)
+# Update and install Apache + PHP
 yum update -y
-yum install -y httpd php php-json git
+yum install -y httpd php php-json git curl
 
 # Clone the repo
 cd /tmp
@@ -13,6 +13,30 @@ git clone https://github.com/harishnshetty/3-tier-aws-terraform-packer-project.g
 # Deploy frontend files
 rm -rf /var/www/html/*
 cp -r 3-tier-aws-terraform-packer-project/application_code/web_files/* /var/www/html/
+
+# Create a test script to debug the backend connection
+cat > /var/www/html/debug-backend.php << 'EOF'
+<?php
+header('Content-Type: text/plain');
+$alb_dns = getenv("APP_ALB_DNS") ?: "undefined";
+echo "APP_ALB_DNS: " . $alb_dns . "\n\n";
+
+// Test backend connection
+$backend_url = "http://" . $alb_dns . "/api/health";
+echo "Testing: " . $backend_url . "\n";
+
+$ch = curl_init();
+curl_setopt($ch, CURLOPT_URL, $backend_url);
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+$response = curl_exec($ch);
+$http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+curl_close($ch);
+
+echo "HTTP Code: " . $http_code . "\n";
+echo "Response: " . $response . "\n";
+?>
+EOF
 
 # Configure Apache with environment variables and proxy
 cat > /etc/httpd/conf.d/frontend.conf << EOF
@@ -29,9 +53,14 @@ cat > /etc/httpd/conf.d/frontend.conf << EOF
     SetEnv PROJECT_NAME ${project_name}
     SetEnv ENVIRONMENT ${environment}
 
-    # Proxy API requests to backend ALB
-    ProxyPass /api/ http://${app_alb_dns}/api/
+    # Proxy API requests to backend ALB - VERBOSE LOGGING
+    ProxyPass /api/ http://${app_alb_dns}/api/ retry=0
     ProxyPassReverse /api/ http://${app_alb_dns}/api/
+    
+    # Log proxy requests for debugging
+    LogLevel debug
+    ErrorLog /var/log/httpd/proxy_error.log
+    CustomLog /var/log/httpd/proxy_access.log combined
 </VirtualHost>
 EOF
 
@@ -47,4 +76,9 @@ chmod -R 755 /var/www/html
 systemctl enable httpd
 systemctl restart httpd
 
-echo "✅ Frontend setup complete with Apache + PHP!"
+# Test the configuration
+echo "Testing backend connection..."
+sleep 3
+curl -s http://localhost/debug-backend.php
+
+echo "✅ Frontend setup complete! Check /debug-backend.php for connection issues."
