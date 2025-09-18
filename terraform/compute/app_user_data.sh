@@ -55,5 +55,7 @@ systemctl restart httpd
 
 # Import database schema if appdb.sql exists
 if [ -f /var/www/html/appdb.sql ]; then
-    mysql -h ${db_host} -u ${db_username} -p${db_password} appdb < /var/www/html/appdb.sql || true
+    mysql --host="${db_host}" --user="${db_username}" --password="${db_password}" appdb <<EOF
+    SOURCE /var/www/html/appdb.sql;
+EOF
 fi
