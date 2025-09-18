@@ -24,16 +24,10 @@ git clone https://github.com/harishnshetty/3-tier-aws-terraform-packer-project.g
 rm -rf /var/www/html/*
 cp -r 3-tier-aws-terraform-packer-project/application_code/app_files/* /var/www/html/
 
-# Install PHP dependencies if composer.json exists
-if [ -f /var/www/html/composer.json ]; then
-    cd /var/www/html
-    composer install --no-dev --optimize-autoloader
-fi
-
 # Copy SQL file for database initialization
 cp /tmp/3-tier-aws-terraform-packer-project/packer/backend/appdb.sql /tmp/appdb.sql
 
-# Database initialization function (RUNS IN FOREGROUND NOW)
+# Database initialization function (RUNS IN FOREGROUND)
 initialize_database() {
     echo "🔄 Initializing database..."
     
@@ -69,6 +63,13 @@ initialize_database() {
 
 # Run database initialization (in foreground)
 initialize_database
+
+# Install PHP dependencies if composer.json exists (FIXED - run as ec2-user)
+if [ -f /var/www/html/composer.json ]; then
+    echo "📦 Installing PHP dependencies..."
+    # Run composer as ec2-user with proper environment
+    sudo -u ec2-user bash -c "cd /var/www/html && COMPOSER_ALLOW_SUPERUSER=1 composer install --no-dev --optimize-autoloader"
+fi
 
 # Apache vhost for the app
 cat > /etc/httpd/conf.d/app.conf <<EOL
