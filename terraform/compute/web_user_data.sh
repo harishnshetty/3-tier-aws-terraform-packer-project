@@ -1,9 +1,9 @@
 #!/bin/bash
 set -e
 
-# Update and install Apache + PHP
+# Update and install Apache + PHP (PHP is needed for health.php, config.php, test-php.php)
 yum update -y
-yum install -y httpd php php-mysqlnd php-json git
+yum install -y httpd php php-json git
 
 # Clone the repo
 cd /tmp
@@ -29,21 +29,15 @@ cat > /etc/httpd/conf.d/frontend.conf << EOF
     SetEnv PROJECT_NAME ${project_name}
     SetEnv ENVIRONMENT ${environment}
 
-    # Proxy API requests to backend ALB - FIXED CONFIGURATION
+    # Proxy API requests to backend ALB
     ProxyPass /api/ http://${app_alb_dns}/api/
     ProxyPassReverse /api/ http://${app_alb_dns}/api/
-    
-    # Handle PHP files
-    <FilesMatch \.php$>
-        SetHandler "proxy:fcgi://127.0.0.1:9000"
-    </FilesMatch>
 </VirtualHost>
 EOF
 
 # Enable proxy modules
-echo "LoadModule proxy_module modules/mod_proxy.so" >> /etc/httpd/conf.modules.d/00-proxy.conf
+echo "LoadModule proxy_module modules/mod_proxy.so" > /etc/httpd/conf.modules.d/00-proxy.conf
 echo "LoadModule proxy_http_module modules/mod_proxy_http.so" >> /etc/httpd/conf.modules.d/00-proxy.conf
-echo "LoadModule proxy_fcgi_module modules/mod_proxy_fcgi.so" >> /etc/httpd/conf.modules.d/00-proxy.conf
 
 # Set proper permissions
 chown -R apache:apache /var/www/html
@@ -53,4 +47,4 @@ chmod -R 755 /var/www/html
 systemctl enable httpd
 systemctl restart httpd
 
-echo "✅ Frontend setup complete with Apache!"
+echo "✅ Frontend setup complete with Apache + PHP!"
