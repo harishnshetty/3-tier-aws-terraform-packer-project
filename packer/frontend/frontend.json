@@ -10,7 +10,7 @@
       "instance_type": "t3.micro",
       "ssh_username": "ec2-user",
       "ami_name": "three-tier-frontend-{{timestamp}}",
-      "ami_description": "Custom frontend AMI with Nginx + PHP (Amazon Linux 2023, kernel 6.12)",
+      "ami_description": "Custom frontend AMI with Apache + PHP (Amazon Linux 2023, kernel 6.12)",
       "tags": {
         "Project": "three-tier",
         "Tier": "frontend"
@@ -22,12 +22,24 @@
       "type": "shell",
       "inline": [
         "set -e",
+        "echo '📦 Installing Apache + PHP...'",
         "sudo dnf update -y",
-        "sudo dnf install -y nginx git php php-fpm php-mysqlnd php-json",
-        "sudo systemctl enable nginx",
-        "sudo systemctl enable php-fpm"
+        "sudo dnf install -y httpd php php-mysqlnd php-json git",
+        
+       
+        "echo '🔧 Configuring Apache...'",
+        "sudo sed -i 's/Listen 80/Listen 80\\nListen 8080/' /etc/httpd/conf/httpd.conf",
+        
+
+        "sudo chown -R apache:apache /var/www",
+        "sudo chmod 755 /var/www/html",
+        
+
+        "sudo systemctl enable httpd",
+        "sudo systemctl enable php-fpm",
+        
+        "echo ✅ Frontend AMI preparation complete!"
       ]
     }
   ]
 }
-

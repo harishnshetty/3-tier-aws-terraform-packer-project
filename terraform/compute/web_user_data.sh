@@ -1,8 +1,9 @@
 #!/bin/bash
 set -e
 
+# Update and install Apache + PHP
 yum update -y
-yum install -y git nginx
+yum install -y httpd php php-mysqlnd php-json git
 
 # Clone the repo
 cd /tmp
@@ -10,52 +11,41 @@ rm -rf 3-tier-aws-terraform-packer-project
 git clone https://github.com/harishnshetty/3-tier-aws-terraform-packer-project.git
 
 # Deploy frontend files
+rm -rf /var/www/html/*
 cp -r 3-tier-aws-terraform-packer-project/application_code/web_files/* /var/www/html/
 
-# Configure Nginx to serve frontend + proxy API to backend ALB
-cat > /etc/nginx/nginx.conf <<EOF
-user nginx;
-worker_processes auto;
-error_log /var/log/nginx/error.log;
-pid /run/nginx.pid;
+# Configure Apache with environment variables and proxy
+cat > /etc/httpd/conf.d/frontend.conf << EOF
+<VirtualHost *:80>
+    DocumentRoot /var/www/html
+    <Directory /var/www/html>
+        AllowOverride All
+        Require all granted
+        FallbackResource /index.html
+    </Directory>
 
-events {
-    worker_connections 1024;
-}
+    # Pass environment variables
+    SetEnv APP_ALB_DNS ${app_alb_dns}
+    SetEnv PROJECT_NAME ${project_name}
+    SetEnv ENVIRONMENT ${environment}
 
-http {
-    include       /etc/nginx/mime.types;
-    default_type  application/octet-stream;
-
-    sendfile        on;
-    keepalive_timeout 65;
-
-    server {
-        listen 80;
-        server_name _;
-
-        root /var/www/html;
-        index index.html;
-
-        location /health {
-            try_files \$uri /health.php;
-        }
-
-        location / {
-            try_files \$uri /index.html;
-        }
-
-        # Proxy API requests to backend ALB
-        location /api/ {
-            proxy_pass http://${app_alb_dns};
-            proxy_set_header Host \$host;
-            proxy_set_header X-Real-IP \$remote_addr;
-            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto \$scheme;
-        }
-    }
-}
+    # Proxy API requests to backend ALB
+    ProxyPass /api/ http://${app_alb_dns}/
+    ProxyPassReverse /api/ http://${app_alb_dns}/
+    
+    # PHP configuration
+    <FilesMatch \.php$>
+        SetHandler "proxy:fcgi://127.0.0.1:9000"
+    </FilesMatch>
+</VirtualHost>
 EOF
 
-systemctl enable nginx
-systemctl restart nginx
+# Set proper permissions
+chown -R apache:apache /var/www/html
+chmod -R 755 /var/www/html
+
+# Enable and start Apache
+systemctl enable httpd
+systemctl restart httpd
+
+echo "✅ Frontend setup complete with Apache!"

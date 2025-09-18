@@ -76,6 +76,7 @@ resource "aws_launch_template" "web" {
   user_data = base64encode(templatefile("${path.module}/web_user_data.sh", {
     project_name = var.project_name
     app_alb_dns  = aws_lb.app.dns_name
+    environment  = var.environment  # ← ADD THIS MISSING VARIABLE
   }))
 
   tag_specifications {
