@@ -17,12 +17,12 @@ dnf install -y mysql-community-client
 
 # Clone the repo
 cd /tmp
-rm -rf 3-tier-terraform-packer-project
-git clone https://github.com/harishnshetty/3-tier-terraform-packer-project.git
+rm -rf 3-tier-aws-terraform-packer-project
+git clone https://github.com/harishnshetty/3-tier-aws-terraform-packer-project.git
 
 # Deploy backend PHP app directly to /var/www/html
 rm -rf /var/www/html/*
-cp -r 3-tier-terraform-packer-project/application_code/app_files/* /var/www/html/
+cp -r 3-tier-aws-terraform-packer-project/application_code/app_files/* /var/www/html/
 
 # Install PHP dependencies if composer.json exists
 if [ -f /var/www/html/composer.json ]; then
