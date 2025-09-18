@@ -17,8 +17,8 @@ packer init .
 
 # VPC & Subnet
 VPC_ID=$(terraform -chdir=../../terraform/network output -raw vpc_id)
-SUBNET_IDS=$(terraform -chdir=../../terraform/network output -json public_subnet_ids)
-SUBNET_ID=$(echo $SUBNET_IDS | jq -r '.[0]')
+SUBNET_ID=$(terraform -chdir=../../terraform/network output -raw public_subnet_1a_id)
+
 
 # RDS
 DB_HOST=$(terraform -chdir=../../terraform/database output -raw rds_address)
