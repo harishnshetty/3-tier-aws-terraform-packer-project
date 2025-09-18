@@ -66,7 +66,7 @@ initialize_database
 
 # Configure Apache with environment variables
 echo "📝 Configuring Apache environment..."
-cat > /etc/httpd/conf.d/app.conf << EOL
+cat > /etc/httpd/conf.d/app.conf << 'EOL'
 <VirtualHost *:80>
     DocumentRoot /var/www/html
     <Directory /var/www/html>
@@ -86,8 +86,8 @@ cat > /etc/httpd/conf.d/app.conf << EOL
     # Enable rewrite engine for clean URLs
     <IfModule mod_rewrite.c>
         RewriteEngine On
-        RewriteCond %{REQUEST_FILENAME} !-f
-        RewriteCond %{REQUEST_FILENAME} !-d
+        RewriteCond %{25}REQUEST_FILENAME !-f
+        RewriteCond %{25}REQUEST_FILENAME !-d
         RewriteRule ^(.*)$ /index.php [QSA,L]
     </IfModule>
 </VirtualHost>
