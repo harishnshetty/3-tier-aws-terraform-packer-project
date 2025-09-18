@@ -30,14 +30,7 @@ if [ -f /var/www/html/composer.json ]; then
     composer install --no-dev --optimize-autoloader
 fi
 
-# Set DB connection details via environment variables
-cat > /etc/profile.d/app_env.sh <<EOF
-export DB_HOST="${db_host}"
-export DB_USERNAME="${db_username}"
-export DB_PASSWORD="${db_password}"
-export DB_NAME="appdb"
-EOF
-chmod 600 /etc/profile.d/app_env.sh
+
 
 # Apache vhost for the app
 cat > /etc/httpd/conf.d/app.conf <<EOL
