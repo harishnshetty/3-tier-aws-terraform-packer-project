@@ -1,8 +1,12 @@
 {
   "variables": {
     "aws_region": "ap-south-1",
+    "source_ami": "",
+    "subnet_id": "",
+    "security_group_id": "",
     "db_host": "",
-    "db_user": "",
+    "db_port": "3306",
+    "db_username": "",
     "db_password": "",
     "db_name": "appdb"
   },
@@ -10,9 +14,11 @@
     {
       "type": "amazon-ebs",
       "region": "{{user `aws_region`}}",
-      "source_ami": "ami-0533167fcff018a86",
+      "source_ami": "{{user `source_ami`}}",
       "instance_type": "t3.micro",
       "ssh_username": "ec2-user",
+      "subnet_id": "{{user `subnet_id`}}",
+      "security_group_id": "{{user `security_group_id`}}",
       "ami_name": "three-tier-backend-{{timestamp}}",
       "ami_description": "Custom backend AMI with Apache (httpd), PHP, Composer, and MySQL client (Amazon Linux 2023, kernel 6.12)",
       "tags": {
@@ -27,7 +33,7 @@
       "inline": [
         "set -e",
         "sudo dnf update -y",
-        "sudo dnf install -y php php-mysqlnd php-json git httpd composer",
+        "sudo dnf install -y php php-mysqlnd php-json git httpd composer wget",
         "sudo systemctl enable httpd",
         "sudo systemctl enable php-fpm",
         "sudo wget https://dev.mysql.com/get/mysql80-community-release-el9-1.noarch.rpm",
@@ -44,8 +50,8 @@
     {
       "type": "shell",
       "inline": [
-        "echo 'Importing schema into database...'",
-        "mysql -h \"{{user `db_host`}}\" -u \"{{user `db_user`}}\" -p\"{{user `db_password`}}\" {{user `db_name`}} < /tmp/appdb.sql || echo '⚠️ Schema import failed'"
+        "echo '📦 Importing schema into database {{user `db_name`}} on {{user `db_host`}}...'",
+        "mysql --host={{user `db_host`}} --port={{user `db_port`}} --user={{user `db_username`}} --password={{user `db_password`}} {{user `db_name`}} < /tmp/appdb.sql || echo '⚠️ Schema import failed, continuing...'"
       ]
     }
   ]

@@ -53,12 +53,4 @@ EOL
 # Restart Apache
 systemctl restart httpd
 
-# # Import database schema if appdb.sql exists
-# if [ -f /var/www/html/appdb.sql ]; then
-#     echo "Importing schema into appdb..."
-#     mysql --host="${db_host}" \
-#           --user="${db_username}" \
-#           --password="${db_password}" \
-#           appdb < /var/www/html/appdb.sql || echo "⚠️ Schema import failed"
-# fi
-# echo "Setup complete!"
+echo "✅ Backend setup complete!"
