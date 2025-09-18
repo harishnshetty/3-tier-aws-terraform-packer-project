@@ -1,6 +1,10 @@
 {
   "variables": {
-    "aws_region": "ap-south-1"
+    "aws_region": "ap-south-1",
+    "db_host": "",
+    "db_user": "",
+    "db_password": "",
+    "db_name": "appdb"
   },
   "builders": [
     {
@@ -10,30 +14,39 @@
       "instance_type": "t3.micro",
       "ssh_username": "ec2-user",
       "ami_name": "three-tier-backend-{{timestamp}}",
-      "ami_description": "Custom backend AMI with Apache (httpd), PHP, Composer (Amazon Linux 2023, kernel 6.12)",
+      "ami_description": "Custom backend AMI with Apache (httpd), PHP, Composer, and MySQL client (Amazon Linux 2023, kernel 6.12)",
       "tags": {
         "Project": "three-tier",
         "Tier": "backend"
       }
     }
   ],
-"provisioners": [
-  {
-    "type": "shell",
-    "inline": [
-      "set -e",
-      "sudo dnf update -y",
-      "sudo dnf install -y php php-mysqlnd php-json git httpd composer",
-      "sudo systemctl enable httpd",
-      "sudo systemctl enable php-fpm",
-
-
-      "sudo wget https://dev.mysql.com/get/mysql80-community-release-el9-1.noarch.rpm",
-      "sudo dnf install -y mysql80-community-release-el9-1.noarch.rpm",
-      "sudo rpm --import https://repo.mysql.com/RPM-GPG-KEY-mysql-2023",
-      "sudo dnf install -y mysql-community-client"
-    ]
-  }
-]
-
+  "provisioners": [
+    {
+      "type": "shell",
+      "inline": [
+        "set -e",
+        "sudo dnf update -y",
+        "sudo dnf install -y php php-mysqlnd php-json git httpd composer",
+        "sudo systemctl enable httpd",
+        "sudo systemctl enable php-fpm",
+        "sudo wget https://dev.mysql.com/get/mysql80-community-release-el9-1.noarch.rpm",
+        "sudo dnf install -y mysql80-community-release-el9-1.noarch.rpm",
+        "sudo rpm --import https://repo.mysql.com/RPM-GPG-KEY-mysql-2023",
+        "sudo dnf install -y mysql-community-client"
+      ]
+    },
+    {
+      "type": "file",
+      "source": "appdb.sql",
+      "destination": "/tmp/appdb.sql"
+    },
+    {
+      "type": "shell",
+      "inline": [
+        "echo 'Importing schema into database...'",
+        "mysql -h \"{{user `db_host`}}\" -u \"{{user `db_user`}}\" -p\"{{user `db_password`}}\" {{user `db_name`}} < /tmp/appdb.sql || echo '⚠️ Schema import failed'"
+      ]
+    }
+  ]
 }
