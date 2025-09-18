@@ -17,16 +17,23 @@
       }
     }
   ],
-  "provisioners": [
-    {
-      "type": "shell",
-      "inline": [
-        "set -e",
-        "sudo dnf update -y",
-        "sudo dnf install -y php php-mysqlnd php-json git httpd composer",
-        "sudo systemctl enable httpd",
-        "sudo systemctl enable php-fpm"
-      ]
-    }
-  ]
+"provisioners": [
+  {
+    "type": "shell",
+    "inline": [
+      "set -e",
+      "sudo dnf update -y",
+      "sudo dnf install -y php php-mysqlnd php-json git httpd composer",
+      "sudo systemctl enable httpd",
+      "sudo systemctl enable php-fpm",
+
+
+      "sudo wget https://dev.mysql.com/get/mysql80-community-release-el9-1.noarch.rpm",
+      "sudo dnf install -y mysql80-community-release-el9-1.noarch.rpm",
+      "sudo rpm --import https://repo.mysql.com/RPM-GPG-KEY-mysql-2023",
+      "sudo dnf install -y mysql-community-client"
+    ]
+  }
+]
+
 }
