@@ -21,6 +21,7 @@ async function initializeApp() {
     
     // Load initial data
     checkHealth();
+    loadUsersForOrderForm();
 }
 
 // Enhanced auto-detection with multiple strategies
@@ -28,6 +29,10 @@ async function autoDetectBackendUrl() {
     const statusElement = document.getElementById('api-config-status');
     statusElement.innerHTML = 'Auto-detecting backend API...';
     statusElement.className = 'text-info';
+    
+    // Get current host information
+    const currentHost = window.location.hostname;
+    const currentProtocol = window.location.protocol;
     
     // Try different discovery strategies
     const discoveryStrategies = [
@@ -66,7 +71,7 @@ async function discoverFromMetaTags() {
     
     // Check for global config variable
     if (window.APP_CONFIG && window.APP_CONFIG.API_BASE_URL) {
-        return window.APP_CONFIG.API_BASE_URL;
+        return window.APP_CONFIG.API_BASE_URL + '/api';
     }
     
     return null;
@@ -76,35 +81,35 @@ async function discoverFromMetaTags() {
 async function discoverFromHealthEndpoint() {
     const testUrls = [
         // Same server different path (common in dev)
-        `${window.location.origin}/api`,
+        `${window.location.origin}/api/health`,
         
         // Same domain different port (common pattern)
-        `${window.location.origin.replace(/:\d+/, ':80')}/api`,
-        `${window.location.origin.replace(/:\d+/, ':8080')}/api`,
+        `${window.location.origin.replace(/:\d+/, ':80')}/api/health`,
+        `${window.location.origin.replace(/:\d+/, ':8080')}/api/health`,
         
         // Common internal ALB patterns
-        `http://internal-${window.location.hostname}/api`,
-        `http://app.${window.location.hostname}/api`,
-        `http://api.${window.location.hostname}/api`,
-        `http://backend.${window.location.hostname}/api`,
+        `http://internal-${window.location.hostname}/api/health`,
+        `http://app.${window.location.hostname}/api/health`,
+        `http://api.${window.location.hostname}/api/health`,
+        `http://backend.${window.location.hostname}/api/health`,
         
         // AWS ALB common patterns
-        `http://${window.location.hostname.replace('web-', 'app-')}/api`,
-        `http://${window.location.hostname.replace('frontend-', 'backend-')}/api`,
+        `http://${window.location.hostname.replace('web-', 'app-')}/api/health`,
+        `http://${window.location.hostname.replace('frontend-', 'backend-')}/api/health`,
     ];
     
     for (const url of testUrls) {
         try {
-            console.log(`Testing health endpoint: ${url}/health`);
-            const response = await fetch(`${url}/health`, {
+            console.log(`Testing health endpoint: ${url}`);
+            const response = await fetch(url, {
                 method: 'GET',
-                signal: AbortSignal.timeout(3000)
+                signal: AbortSignal.timeout(2000)
             });
             
             if (response.ok) {
                 const data = await response.json();
                 if (data.service === 'api-backend') {
-                    return url;
+                    return url.replace('/health', '');
                 }
             }
         } catch (error) {
@@ -128,6 +133,9 @@ async function discoverFromCommonPatterns() {
         'http://internal-app-alb/api',
         'http://app.internal/api',
         'http://api.internal/api',
+        
+        // AWS-specific patterns
+        'http://app-alb-123456789.ap-south-1.elb.amazonaws.com/api',
     ];
     
     for (const pattern of commonPatterns) {
@@ -136,7 +144,7 @@ async function discoverFromCommonPatterns() {
             console.log(`Testing pattern: ${testUrl}`);
             const response = await fetch(testUrl, {
                 method: 'GET',
-                signal: AbortSignal.timeout(3000)
+                signal: AbortSignal.timeout(2000)
             });
             
             if (response.ok) {
@@ -178,7 +186,7 @@ function getIntelligentFallback() {
     
     // Local development
     if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '') {
-        return 'http://localhost/api';
+        return 'http://localhost:80/api';
     }
     
     // AWS ALB pattern detection
@@ -204,102 +212,39 @@ async function apiCall(endpoint, options = {}) {
             const url = `${BACKEND_API_URL}${endpoint}`;
             console.log(`API Call (attempt ${attempt}): ${url}`);
             
-            // Default options
-            const fetchOptions = {
+            const response = await fetch(url, {
                 headers: {
                     'Content-Type': 'application/json',
                     ...options.headers
                 },
-                mode: 'cors',
-                credentials: 'omit',
                 ...options
-            };
-            
-            // For non-GET requests, ensure we have a body
-            if (options.method && options.method !== 'GET' && options.body) {
-                fetchOptions.body = JSON.stringify(options.body);
-            }
-            
-            const response = await fetch(url, fetchOptions);
-            
-            // Check if response is JSON
-            const contentType = response.headers.get('content-type');
-            let data;
-            
-            if (contentType && contentType.includes('application/json')) {
-                data = await response.json();
-            } else {
-                const text = await response.text();
-                console.warn(`Non-JSON response from ${url}:`, text);
-                
-                // Try to parse as JSON anyway (some APIs don't set proper content-type)
-                try {
-                    data = JSON.parse(text);
-                } catch (parseError) {
-                    throw new Error(`Expected JSON but got ${contentType}: ${text.substring(0, 100)}`);
-                }
-            }
+            });
             
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}, message: ${data.message || 'Unknown error'}`);
+                throw new Error(`HTTP error! status: ${response.status}`);
             }
             
-            return data;
+            return await response.json();
             
         } catch (error) {
             console.error(`API call failed (attempt ${attempt}):`, error);
             
-            // If it's a CORS error, we need to handle it differently
-            if (error.message.includes('CORS') || error.message.includes('NetworkError') || error.message.includes('Failed to fetch')) {
-                console.error('Network error detected. Trying without CORS mode.');
-                
-                // Try without CORS mode
-                try {
-                    const simpleUrl = `${BACKEND_API_URL}${endpoint}`;
-                    const simpleResponse = await fetch(simpleUrl, { 
-                        method: 'GET',
-                        mode: 'no-cors'
-                    });
-                    console.log('Simple fetch response:', simpleResponse);
-                } catch (simpleError) {
-                    console.error('Simple fetch also failed:', simpleError);
-                }
-            }
-            
             if (attempt === maxRetries) {
-                throw new Error(`Failed after ${maxRetries} attempts: ${error.message}`);
+                // Last attempt failed, try to rediscover backend
+                BACKEND_API_URL = ''; // Reset to force rediscovery
+                if (API_DISCOVERY_ATTEMPTS < MAX_DISCOVERY_ATTEMPTS) {
+                    API_DISCOVERY_ATTEMPTS++;
+                    await autoDetectBackendUrl();
+                    // Retry the request
+                    continue;
+                }
+                throw error;
             }
             
             // Wait before retrying
             await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
         }
     }
-}
-
-// Enhanced error display
-function showError(context, error) {
-    const errorElement = document.getElementById(`${context}-error`) || 
-                         document.getElementById(`${context}-list`) || 
-                         document.getElementById('health-status');
-    
-    let errorMessage = error.message;
-    
-    // Provide more user-friendly error messages
-    if (error.message.includes('CORS') || error.message.includes('NetworkError') || error.message.includes('Failed to fetch')) {
-        errorMessage = 'Connection error. Please check if the backend server is running and accessible.';
-    }
-    
-    if (errorElement) {
-        errorElement.innerHTML = `
-            <div class="alert alert-danger">
-                <strong>Error loading ${context}:</strong> ${errorMessage}
-                <br><small>URL: ${BACKEND_API_URL}/${context.toLowerCase()}</small>
-                <br><small>Check browser console for details</small>
-            </div>
-        `;
-    }
-    
-    console.error(`Error in ${context}:`, error);
 }
 
 // Health Check with better error handling
@@ -325,16 +270,11 @@ async function checkHealth() {
         
         // Update environment badge
         const envBadge = document.getElementById('environment-badge');
-        if (envBadge) {
-            envBadge.textContent = data.environment.toUpperCase();
-            envBadge.className = `environment-${data.environment.toLowerCase()}`;
-        }
+        envBadge.textContent = data.environment.toUpperCase();
+        envBadge.className = `environment-${data.environment.toLowerCase()}`;
         
         // Update server info in footer
-        const serverInfo = document.getElementById('server-info');
-        if (serverInfo) {
-            serverInfo.textContent = data.server;
-        }
+        document.getElementById('server-info').textContent = data.server;
         
     } catch (error) {
         const healthStatus = document.getElementById('health-status');
@@ -345,7 +285,6 @@ async function checkHealth() {
             </span>
         `;
         healthStatus.className = 'health-error';
-        showError('health', error);
     }
 }
 
@@ -367,7 +306,8 @@ async function loadUsers() {
             usersList.innerHTML = '<p class="text-muted">No users found</p>';
         }
     } catch (error) {
-        showError('users', error);
+        document.getElementById('users-list').innerHTML = 
+            `<p class="text-danger">Error loading users: ${error.message}</p>`;
     }
 }
 
@@ -380,18 +320,18 @@ async function handleUserSubmit(event) {
     try {
         const result = await apiCall('/users', {
             method: 'POST',
-            body: {
+            body: JSON.stringify({
                 name: nameInput.value,
                 email: emailInput.value
-            }
+            })
         });
         
         if (result.status === 'success') {
             alert('User added successfully!');
             nameInput.value = '';
             emailInput.value = '';
-            loadUsers();
-            loadUsersForOrderForm();
+            loadUsers(); // Refresh the users list
+            loadUsersForOrderForm(); // Refresh the user dropdown
         }
     } catch (error) {
         alert(`Error adding user: ${error.message}`);
@@ -415,7 +355,8 @@ async function loadProducts() {
             productsList.innerHTML = '<p class="text-muted">No products found</p>';
         }
     } catch (error) {
-        showError('products', error);
+        document.getElementById('products-list').innerHTML = 
+            `<p class="text-danger">Error loading products: ${error.message}</p>`;
     }
 }
 
@@ -429,11 +370,11 @@ async function handleProductSubmit(event) {
     try {
         const result = await apiCall('/products', {
             method: 'POST',
-            body: {
+            body: JSON.stringify({
                 name: nameInput.value,
                 price: parseFloat(priceInput.value),
                 description: descriptionInput.value
-            }
+            })
         });
         
         if (result.status === 'success') {
@@ -441,7 +382,7 @@ async function handleProductSubmit(event) {
             nameInput.value = '';
             priceInput.value = '';
             descriptionInput.value = '';
-            loadProducts();
+            loadProducts(); // Refresh the products list
         }
     } catch (error) {
         alert(`Error adding product: ${error.message}`);
@@ -454,20 +395,18 @@ async function loadUsersForOrderForm() {
         const data = await apiCall('/users');
         const userSelect = document.getElementById('order-user');
         
-        if (userSelect) {
-            // Clear existing options except the first one
-            while (userSelect.options.length > 1) {
-                userSelect.remove(1);
-            }
-            
-            if (data.data && data.data.length > 0) {
-                data.data.forEach(user => {
-                    const option = document.createElement('option');
-                    option.value = user.id;
-                    option.textContent = `${user.name} (${user.email})`;
-                    userSelect.appendChild(option);
-                });
-            }
+        // Clear existing options except the first one
+        while (userSelect.options.length > 1) {
+            userSelect.remove(1);
+        }
+        
+        if (data.data && data.data.length > 0) {
+            data.data.forEach(user => {
+                const option = document.createElement('option');
+                option.value = user.id;
+                option.textContent = `${user.name} (${user.email})`;
+                userSelect.appendChild(option);
+            });
         }
     } catch (error) {
         console.error('Error loading users for order form:', error);
@@ -494,7 +433,8 @@ async function loadOrders() {
             ordersList.innerHTML = '<p class="text-muted">No orders found</p>';
         }
     } catch (error) {
-        showError('orders', error);
+        document.getElementById('orders-list').innerHTML = 
+            `<p class="text-danger">Error loading orders: ${error.message}</p>`;
     }
 }
 
@@ -507,72 +447,19 @@ async function handleOrderSubmit(event) {
     try {
         const result = await apiCall('/orders', {
             method: 'POST',
-            body: {
+            body: JSON.stringify({
                 user_id: parseInt(userSelect.value),
-                total_amount: parseFloat(totalInput.value),
-                status: 'pending'
-            }
+                total_amount: parseFloat(totalInput.value)
+            })
         });
         
         if (result.status === 'success') {
             alert('Order created successfully!');
             userSelect.value = '';
             totalInput.value = '';
-            loadOrders();
+            loadOrders(); // Refresh the orders list
         }
     } catch (error) {
         alert(`Error creating order: ${error.message}`);
     }
 }
-
-// Debug function to test backend connectivity
-async function testBackendConnectivity() {
-    console.log('Testing backend connectivity...');
-    
-    try {
-        // Test basic connectivity
-        const response = await fetch(`${BACKEND_API_URL}/health`, {
-            method: 'GET',
-            mode: 'cors',
-            credentials: 'omit'
-        });
-        
-        console.log('Health check response:', response.status, response.statusText);
-        
-        if (response.ok) {
-            const data = await response.json();
-            console.log('Health data:', data);
-        }
-        
-        // Test CORS with OPTIONS request
-        try {
-            const optionsResponse = await fetch(`${BACKEND_API_URL}/health`, {
-                method: 'OPTIONS',
-                mode: 'cors',
-                credentials: 'omit'
-            });
-            
-            console.log('OPTIONS response:', optionsResponse.status, optionsResponse.statusText);
-            console.log('CORS headers:');
-            ['access-control-allow-origin', 'access-control-allow-methods', 'access-control-allow-headers'].forEach(header => {
-                console.log(`  ${header}:`, optionsResponse.headers.get(header));
-            });
-        } catch (optionsError) {
-            console.log('OPTIONS request failed (may be normal):', optionsError.message);
-        }
-        
-        return true;
-    } catch (error) {
-        console.error('Backend connectivity test failed:', error);
-        return false;
-    }
-}
-
-// Run connectivity test on startup
-setTimeout(() => {
-    testBackendConnectivity();
-    loadUsers();
-    loadProducts();
-    loadOrders();
-    loadUsersForOrderForm();
-}, 1000);

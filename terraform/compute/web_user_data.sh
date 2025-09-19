@@ -25,7 +25,7 @@ header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 
 // Get backend URL from Terraform variables
-$backendUrl = 'http://${app_alb_dns}';
+$backendUrl = 'http://${app_alb_dns}/api';
 
 echo json_encode([
     'backendUrl' => $backendUrl,
@@ -54,8 +54,8 @@ cat > /var/www/html/health.html << 'EOL'
 </html>
 EOL
 
-# Add meta tag with backend URL to HTML
-sed -i '/<head>/a \    <meta name="backend-api-url" content="http://${app_alb_dns}/api">' /var/www/html/index.html
+# Update HTML with correct backend URL
+sed -i "s|http://internal-three-tier-app-app-alb-1059148255.ap-south-1.elb.amazonaws.com/api|http://${app_alb_dns}/api|g" /var/www/html/index.html
 
 # Set proper permissions
 chown -R apache:apache /var/www/html
@@ -66,7 +66,16 @@ cat > /etc/httpd/conf.d/cors.conf << 'EOL'
 Header always set Access-Control-Allow-Origin "*"
 Header always set Access-Control-Allow-Methods "GET, POST, OPTIONS, PUT, DELETE"
 Header always set Access-Control-Allow-Headers "Content-Type, Authorization"
+
+# Handle preflight requests
+RewriteEngine On
+RewriteCond %{REQUEST_METHOD} OPTIONS
+RewriteRule ^(.*)$ $1 [R=200,L]
 EOL
+
+# Enable mod_rewrite and mod_headers
+sed -i '/LoadModule rewrite_module/s/^#//g' /etc/httpd/conf.modules.d/00-base.conf
+sed -i '/LoadModule headers_module/s/^#//g' /etc/httpd/conf.modules.d/00-base.conf
 
 # Restart Apache to apply all configurations
 systemctl restart httpd
