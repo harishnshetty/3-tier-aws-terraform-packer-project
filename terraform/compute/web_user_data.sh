@@ -2,12 +2,12 @@
 set -e
 
 # Update and install dependencies
-dnf update -y
-dnf install -y httpd php
+apt-get update -y
+apt-get install -y apache2 php git curl
 
 # Enable and start Apache
-systemctl enable httpd
-systemctl start httpd
+systemctl enable apache2
+systemctl start apache2
 
 # Clone the repo
 cd /tmp
@@ -18,7 +18,8 @@ git clone https://github.com/harishnshetty/3-tier-aws-terraform-packer-project.g
 rm -rf /var/www/html/*
 cp -r 3-tier-aws-terraform-packer-project/application_code/web_files/* /var/www/html/
 
-$backendUrl = 'http://${app_alb_dns}/api';
+# Backend URL from Terraform variable
+backendUrl="http://${app_alb_dns}/api"
 
 # Create environment configuration endpoint
 cat > /var/www/html/env-config.php << EOF
@@ -26,8 +27,7 @@ cat > /var/www/html/env-config.php << EOF
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 
-// Get backend URL from Terraform variables
-\$backendUrl = 'http://${app_alb_dns}/api';
+\$backendUrl = '${backendUrl}';
 
 echo json_encode([
     'backendUrl' => \$backendUrl,
@@ -38,40 +38,42 @@ echo json_encode([
 ?>
 EOF
 
-# Create a dynamic configuration file
+# Create a dynamic JavaScript config file
 cat > /var/www/html/config.js << EOF
 // Auto-generated configuration
 window.APP_CONFIG = {
-    API_BASE_URL: 'http://${app_alb_dns}/api',
+    API_BASE_URL: '${backendUrl}',
     ENVIRONMENT: '${environment}',
     PROJECT_NAME: '${project_name}',
     TIMESTAMP: '$(date -Iseconds)'
 };
 EOF
 
-# Update the meta tag in HTML with the actual ALB DNS from Terraform
-sed -i "s|http://APP_ALB_DNS_PLACEHOLDER/api|http://${app_alb_dns}/api|g" /var/www/html/index.html
+# Update index.html meta tag if placeholder exists
+if grep -q "APP_ALB_DNS_PLACEHOLDER" /var/www/html/index.html; then
+    sed -i "s|http://APP_ALB_DNS_PLACEHOLDER/api|${backendUrl}|g" /var/www/html/index.html
+fi
 
 # Set proper permissions
-chown -R apache:apache /var/www/html
+chown -R www-data:www-data /var/www/html
 chmod -R 755 /var/www/html
 
 # Configure Apache to allow CORS
-cat > /etc/httpd/conf.d/cors.conf << 'EOL'
+cat > /etc/apache2/conf-available/cors.conf << EOF
 Header always set Access-Control-Allow-Origin "*"
 Header always set Access-Control-Allow-Methods "GET, POST, OPTIONS, PUT, DELETE"
 Header always set Access-Control-Allow-Headers "Content-Type, Authorization"
-EOL
+EOF
 
-# Enable mod_rewrite and mod_headers
-sed -i '/LoadModule rewrite_module/s/^#//g' /etc/httpd/conf.modules.d/00-base.conf
-sed -i '/LoadModule headers_module/s/^#//g' /etc/httpd/conf.modules.d/00-base.conf
+a2enmod headers
+a2enmod rewrite
+a2enconf cors
 
 # Restart Apache to apply all configurations
-systemctl restart httpd
+systemctl restart apache2
 
 echo "🎉 Frontend setup completed successfully!"
 echo "🌐 Server: $(hostname)"
 echo "📊 Environment: ${environment}"
 echo "🏷️ Project: ${project_name}"
-echo "🔗 Backend API: http://${app_alb_dns}/api"
+echo "🔗 Backend API: ${backendUrl}"

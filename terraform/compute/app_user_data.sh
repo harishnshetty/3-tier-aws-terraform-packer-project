@@ -1,149 +1,134 @@
 #!/bin/bash
 set -e
 
+# -----------------------------
 # Update and install dependencies
-dnf update -y
-dnf install -y php php-mysqlnd php-json php-pdo git httpd composer
+# -----------------------------
+apt-get update -y
+apt-get install -y python3 python3-pip git curl
 
-# Enable and start Apache
-systemctl enable httpd
-systemctl start httpd
+# -----------------------------
+# Install Python packages
+# -----------------------------
+pip3 install --upgrade pip
+pip3 install flask mysql-connector-python gunicorn
 
-# Install official MySQL client
-wget https://dev.mysql.com/get/mysql80-community-release-el9-1.noarch.rpm
-dnf install -y mysql80-community-release-el9-1.noarch.rpm
-rpm --import https://repo.mysql.com/RPM-GPG-KEY-mysql-2023
-dnf install -y mysql-community-client
-
-# Clone the repo
+# -----------------------------
+# Clone the backend repo
+# -----------------------------
 cd /tmp
 rm -rf 3-tier-aws-terraform-packer-project
 git clone https://github.com/harishnshetty/3-tier-aws-terraform-packer-project.git
 
-# Deploy backend PHP app directly to /var/www/html
-rm -rf /var/www/html/*
-cp -r 3-tier-aws-terraform-packer-project/application_code/app_files/* /var/www/html/
+# Copy app files
+rm -rf /opt/app
+mkdir -p /opt/app
+cp -r 3-tier-aws-terraform-packer-project/application_code/app_files/* /opt/app/
 
-# Copy SQL file for database initialization
-cp /tmp/3-tier-aws-terraform-packer-project/packer/backend/appdb.sql /tmp/appdb.sql
-
-# Database initialization function (RUNS IN FOREGROUND)
-initialize_database() {
-    echo "🔄 Initializing database..."
-    
-    # Database connection parameters (from Terraform template)
-    DB_HOST="${db_host}"
-    DB_NAME="${db_name}"
-    DB_USER="${db_user}"
-    DB_PASSWORD="${db_password}"
-    
-    # Wait for RDS to be ready (with timeout)
-    echo "⏳ Waiting for RDS to be available..."
-    for i in {1..30}; do
-        if mysql -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASSWORD" -e "SELECT 1" 2>/dev/null; then
-            echo "✅ Database connection successful!"
-            
-            # Import the SQL schema
-            echo "📦 Importing database schema..."
-            if mysql -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASSWORD" < /tmp/appdb.sql; then
-                echo "🎉 Database initialization complete!"
-                return 0
-            else
-                echo "❌ Failed to import database schema!"
-                return 1
-            fi
-        fi
-        echo "📡 Database not ready yet (attempt $i/30), retrying in 10 seconds..."
-        sleep 10
-    done
-    
-    echo "❌ Timeout waiting for database connection!"
-    return 1
+# -----------------------------
+# Create database configuration file
+# -----------------------------
+cat > /opt/app/db_config.py << EOF
+DB_CONFIG = {
+    "host": "${db_host}",
+    "user": "${db_user}",
+    "password": "${db_password}",
+    "database": "${db_name}"
 }
+EOF
 
-# Run database initialization (in foreground)
-initialize_database
+chown -R ubuntu:ubuntu /opt/app
+chmod -R 750 /opt/app
 
-# Configure Apache with environment variables
-# Configure Apache with environment variables
-echo "📝 Configuring Apache environment..."
-cat > /etc/httpd/conf.d/app.conf << 'EOL'
-<VirtualHost *:80>
-    DocumentRoot /var/www/html
-    <Directory /var/www/html>
-        AllowOverride All
-        Require all granted
-        # Use FallbackResource instead of complex rewrite rules
-        FallbackResource /index.php
-    </Directory>
+# -----------------------------
+# Create Python DB initialization script
+# -----------------------------
+cat > /opt/app/db_init.py << EOF
+import mysql.connector
+from db_config import DB_CONFIG
 
-    # Pass environment variables from Terraform
-    SetEnv DB_HOST ${db_host}
-    SetEnv DB_USERNAME ${db_user}
-    SetEnv DB_PASSWORD ${db_password}
-    SetEnv DB_NAME ${db_name}
-    SetEnv ENVIRONMENT ${environment}
-    SetEnv PROJECT_NAME ${project_name}
-</VirtualHost>
-EOL
+conn = mysql.connector.connect(**DB_CONFIG)
+cursor = conn.cursor()
 
-# Also create .env file as backup
-echo "📝 Creating .env file..."
-cat > /var/www/html/.env << EOL
-DB_HOST=${db_host}
-DB_USERNAME=${db_user}
-DB_PASSWORD=${db_password}
-DB_NAME=${db_name}
-ENVIRONMENT=${environment}
-PROJECT_NAME=${project_name}
-EOL
+# Create tables if not exist
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS users (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100),
+    email VARCHAR(100)
+)
+""")
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS products (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100),
+    price DECIMAL(10,2)
+)
+""")
 
-# Set proper permissions
-chown apache:apache /var/www/html/.env
-chmod 640 /var/www/html/.env
+# Insert initial data (ignore duplicates)
+cursor.execute("""
+INSERT IGNORE INTO users (id, name, email) VALUES
+(1, 'Alice', 'alice@example.com'),
+(2, 'Bob', 'bob@example.com')
+""")
+cursor.execute("""
+INSERT IGNORE INTO products (id, name, price) VALUES
+(1, 'Product1', 10.50),
+(2, 'Product2', 20.00)
+""")
 
-# Install PHP dependencies if composer.json exists (safe method)
-if [ -f /var/www/html/composer.json ]; then
-    echo "📦 Installing PHP dependencies..."
-    # Set proper home directory for composer
-    export HOME=/home/ec2-user
-    export COMPOSER_HOME=/home/ec2-user/.composer
-    mkdir -p $COMPOSER_HOME
-    chown ec2-user:ec2-user $COMPOSER_HOME
-    
-    # Run composer as ec2-user
-    sudo -u ec2-user bash -c "
-        cd /var/www/html
-        export COMPOSER_ALLOW_SUPERUSER=1
-        composer install --no-dev --optimize-autoloader --no-interaction
-    "
-fi
+conn.commit()
+cursor.close()
+conn.close()
+EOF
 
-# Restart Apache to apply all configurations
-echo "🔄 Restarting Apache..."
-systemctl restart httpd
+# Run DB initialization
+echo "🔄 Initializing database..."
+python3 /opt/app/db_init.py
+echo "✅ Database initialized successfully!"
 
-# Test the configuration
-echo "🧪 Testing API configuration..."
-sleep 5
+# -----------------------------
+# Create systemd service for Flask API
+# -----------------------------
+cat > /etc/systemd/system/backend.service << EOF
+[Unit]
+Description=Python Flask Backend API
+After=network.target
 
-# Test health endpoint
-if curl -s http://localhost/api/health > /dev/null; then
-    echo "✅ API health check passed!"
-else
-    echo "❌ API health check failed!"
-    echo "Checking Apache error logs:"
-    tail -20 /var/log/httpd/error_log
-fi
+[Service]
+User=ubuntu
+WorkingDirectory=/opt/app
+ExecStart=/usr/local/bin/gunicorn -w 3 -b 0.0.0.0:5000 app:app
+Restart=always
 
-# Test database connection through API
-if curl -s http://localhost/api/db-test > /dev/null; then
-    echo "✅ Database connection test passed!"
-else
-    echo "⚠️ Database connection test may have failed (check API)"
-fi
+[Install]
+WantedBy=multi-user.target
+EOF
 
+# Reload systemd and enable service
+systemctl daemon-reload
+systemctl enable backend.service
+systemctl start backend.service
+
+# -----------------------------
+# Wait for API to become healthy
+# -----------------------------
+echo "⏳ Waiting for backend API to start..."
+for i in {1..20}; do
+    if curl -s http://localhost:5000/api/users > /dev/null; then
+        echo "✅ Backend API is up and running!"
+        break
+    fi
+    echo "Waiting 5 seconds..."
+    sleep 5
+done
+
+# -----------------------------
+# Output status
+# -----------------------------
 echo "🎉 Backend setup completed successfully!"
 echo "🌐 Server: $(hostname)"
 echo "📊 Environment: ${environment}"
 echo "🏷️ Project: ${project_name}"
+echo "🔗 API URL: http://$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4):5000"

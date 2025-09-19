@@ -6,15 +6,15 @@
     {
       "type": "amazon-ebs",
       "region": "{{user `aws_region`}}",
-      "source_ami": "ami-0533167fcff018a86",
+      "source_ami": "ami-02d26659fd82cf299",
       "instance_type": "t3.micro",
-      "ssh_username": "ec2-user",
-      "ami_name": "three-tier-backend-al2023-{{timestamp}}",
-      "ami_description": "Custom backend AMI with Apache, PHP, Composer on Amazon Linux 2023",
+      "ssh_username": "ubuntu",
+      "ami_name": "three-tier-backend-flask-ubuntu-{{timestamp}}",
+      "ami_description": "Custom backend AMI with Python Flask + MySQL client on Ubuntu 24.04 LTS",
       "tags": {
         "Project": "three-tier",
         "Tier": "backend",
-        "Base_AMI": "amazon-linux-2023-kernel-6.1"
+        "Base_AMI": "ubuntu-24.04"
       }
     }
   ],
@@ -24,14 +24,13 @@
       "inline": [
         "set -e",
         "echo '📦 Updating system and installing required packages...'",
-        "sudo dnf update -y",
-        "sudo dnf install -y php php-mysqlnd php-json git httpd composer wget ",
-        "sudo wget https://dev.mysql.com/get/mysql80-community-release-el9-1.noarch.rpm",
-        "sudo dnf install mysql80-community-release-el9-1.noarch.rpm -y",
-        "sudo rpm --import https://repo.mysql.com/RPM-GPG-KEY-mysql-2023",
-        "sudo dnf install -y mysql-community-client",
-        "sudo systemctl enable httpd",
-        "sudo systemctl enable php-fpm"
+        "sudo apt update -y",
+        "sudo apt install -y python3 python3-pip git mysql-client",
+        
+        "echo '📦 Installing Flask + MySQL connector + Gunicorn...'",
+        "pip3 install flask mysql-connector-python gunicorn",
+        
+        "echo ✅ Backend AMI (Flask) preparation complete!"
       ]
     }
   ]

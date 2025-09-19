@@ -6,11 +6,11 @@
     {
       "type": "amazon-ebs",
       "region": "{{user `aws_region`}}",
-      "source_ami": "ami-0533167fcff018a86",
+      "source_ami": "ami-02d26659fd82cf299",
       "instance_type": "t3.micro",
-      "ssh_username": "ec2-user",
+      "ssh_username": "ubuntu",
       "ami_name": "three-tier-frontend-{{timestamp}}",
-      "ami_description": "Custom frontend AMI with Apache + PHP (Amazon Linux 2023, kernel 6.12)",
+      "ami_description": "Custom frontend AMI with Apache + PHP (Ubuntu Server 24.04 LTS)",
       "tags": {
         "Project": "three-tier",
         "Tier": "frontend"
@@ -23,20 +23,16 @@
       "inline": [
         "set -e",
         "echo '📦 Installing Apache + PHP...'",
-        "sudo dnf update -y",
-        "sudo dnf install -y httpd php php-mysqlnd php-json git",
+        "sudo apt update -y",
+        "sudo apt install -y apache2 php libapache2-mod-php php-mysql php-json git",
         
-       
         "echo '🔧 Configuring Apache...'",
-        "sudo sed -i 's/Listen 80/Listen 80\\nListen 8080/' /etc/httpd/conf/httpd.conf",
+        "sudo sed -i 's/Listen 80/Listen 80\\nListen 8080/' /etc/apache2/ports.conf",
         
-
-        "sudo chown -R apache:apache /var/www",
+        "sudo chown -R www-data:www-data /var/www",
         "sudo chmod 755 /var/www/html",
         
-
-        "sudo systemctl enable httpd",
-        "sudo systemctl enable php-fpm",
+        "sudo systemctl enable apache2",
         
         "echo ✅ Frontend AMI preparation complete!"
       ]
