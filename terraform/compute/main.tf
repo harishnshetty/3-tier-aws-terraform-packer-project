@@ -73,11 +73,12 @@ resource "aws_launch_template" "web" {
     security_groups             = [data.terraform_remote_state.network.outputs.web_sg_id]
   }
 
-  user_data = base64encode(templatefile("${path.module}/web_user_data.sh", {
-    project_name     = var.project_name
-    backend_alb_dns  = aws_lb.app.dns_name   # 👈 renamed for clarity
-    environment      = var.environment
-  }))
+user_data = base64encode(templatefile("${path.module}/web_user_data.sh", {
+  project_name    = var.project_name
+  backend_alb_dns = aws_lb.app.dns_name
+  environment     = var.environment
+}))
+
 
   tag_specifications {
     resource_type = "instance"

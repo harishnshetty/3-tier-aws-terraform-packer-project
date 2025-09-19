@@ -17,6 +17,7 @@ rm -rf /var/www/html/*
 cp -r 3-tier-aws-terraform-packer-project/application_code/web_files/* /var/www/html/
 
 # Apache virtual host configuration
+# Apache virtual host configuration
 cat > /etc/httpd/conf.d/frontend.conf << EOF
 <VirtualHost *:80>
     DocumentRoot /var/www/html
@@ -26,28 +27,21 @@ cat > /etc/httpd/conf.d/frontend.conf << EOF
         FallbackResource /index.html
     </Directory>
 
-    # Pass environment variables to PHP
-    SetEnv APP_ALB_DNS ${app_alb_dns}
+    # Pass environment variables
+    SetEnv APP_ALB_DNS ${backend_alb_dns}
     SetEnv PROJECT_NAME ${project_name}
     SetEnv ENVIRONMENT ${environment}
 
     # Proxy API requests to backend ALB
-    ProxyPass "/api/" "http://${app_alb_dns}/api/"
-    ProxyPassReverse "/api/" "http://${app_alb_dns}/api/"
-
-    # Optional: add CORS headers for API calls
-    <IfModule mod_headers.c>
-        Header set Access-Control-Allow-Origin "*"
-        Header set Access-Control-Allow-Methods "GET, POST, OPTIONS"
-        Header set Access-Control-Allow-Headers "Content-Type"
-    </IfModule>
-
-    # Handle PHP files
+    ProxyPass "/api/" "http://${backend_alb_dns}/api/"
+    ProxyPassReverse "/api/" "http://${backend_alb_dns}/api/"
+    
     <FilesMatch \.php$>
         SetHandler application/x-httpd-php
     </FilesMatch>
 </VirtualHost>
 EOF
+
 
 # Make sure proxy modules are enabled
 echo "LoadModule proxy_module modules/mod_proxy.so"     >  /etc/httpd/conf.modules.d/00-proxy.conf
