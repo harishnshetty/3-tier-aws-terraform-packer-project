@@ -9,8 +9,8 @@
       "source_ami": "ami-02d26659fd82cf299",
       "instance_type": "t3.micro",
       "ssh_username": "ubuntu",
-      "ami_name": "three-tier-backend-flask-ubuntu-{{timestamp}}",
-      "ami_description": "Custom backend AMI with Python Flask + MySQL client on Ubuntu 24.04 LTS",
+      "ami_name": "three-tier-backend-php-ubuntu-{{timestamp}}",
+      "ami_description": "Custom backend AMI with Apache, PHP, Composer on Ubuntu 24.04 LTS",
       "tags": {
         "Project": "three-tier",
         "Tier": "backend",
@@ -25,12 +25,13 @@
         "set -e",
         "echo '📦 Updating system and installing required packages...'",
         "sudo apt update -y",
-        "sudo apt install -y python3 python3-pip git mysql-client",
+        "sudo apt install -y apache2 php libapache2-mod-php php-mysql php-json composer git wget mysql-client",
         
-        "echo '📦 Installing Flask + MySQL connector + Gunicorn...'",
-        "pip3 install flask mysql-connector-python gunicorn",
+        "echo '⚙️ Configuring Apache...'",
+        "sudo systemctl enable apache2",
+        "sudo systemctl enable php8.3-fpm || true",
         
-        "echo ✅ Backend AMI (Flask) preparation complete!"
+        "echo ✅ Backend AMI (PHP) preparation complete!"
       ]
     }
   ]
