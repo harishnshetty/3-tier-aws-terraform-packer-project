@@ -13,15 +13,29 @@ async function initializeApp() {
     // Load configuration first
     await loadConfiguration();
     
-    // Auto-detect backend API URL
-    await autoDetectBackendUrl();
+    // Only auto-detect if configuration loading failed
+    if (!CONFIG_LOADED) {
+        await autoDetectBackendUrl();
+    }
     
     // Set up event listeners
-    document.getElementById('user-form').addEventListener('submit', handleUserSubmit);
-    document.getElementById('product-form').addEventListener('submit', handleProductSubmit);
-    document.getElementById('order-form').addEventListener('submit', handleOrderSubmit);
+    setupEventListeners();
     
     // Load initial data
+    loadInitialData();
+}
+
+function setupEventListeners() {
+    const userForm = document.getElementById('user-form');
+    const productForm = document.getElementById('product-form');
+    const orderForm = document.getElementById('order-form');
+    
+    if (userForm) userForm.addEventListener('submit', handleUserSubmit);
+    if (productForm) productForm.addEventListener('submit', handleProductSubmit);
+    if (orderForm) orderForm.addEventListener('submit', handleOrderSubmit);
+}
+
+function loadInitialData() {
     checkHealth();
     loadUsers();
     loadProducts();
@@ -31,10 +45,14 @@ async function initializeApp() {
 
 // Load configuration from multiple sources
 async function loadConfiguration() {
+    const statusElement = document.getElementById('api-config-status');
+    
     // Try to load from config.js first
     if (window.APP_CONFIG && window.APP_CONFIG.API_BASE_URL) {
         BACKEND_API_URL = window.APP_CONFIG.API_BASE_URL;
         CONFIG_LOADED = true;
+        statusElement.innerHTML = `✅ Configuration loaded from config.js: ${BACKEND_API_URL}`;
+        statusElement.className = 'text-success';
         console.log('Configuration loaded from config.js:', BACKEND_API_URL);
         return;
     }
@@ -44,6 +62,8 @@ async function loadConfiguration() {
     if (metaTag && metaTag.content && metaTag.content !== 'http://APP_ALB_DNS_PLACEHOLDER/api') {
         BACKEND_API_URL = metaTag.content;
         CONFIG_LOADED = true;
+        statusElement.innerHTML = `✅ Configuration loaded from meta tag: ${BACKEND_API_URL}`;
+        statusElement.className = 'text-success';
         console.log('Configuration loaded from meta tag:', BACKEND_API_URL);
         return;
     }
@@ -56,6 +76,8 @@ async function loadConfiguration() {
             if (config.backendUrl) {
                 BACKEND_API_URL = config.backendUrl;
                 CONFIG_LOADED = true;
+                statusElement.innerHTML = `✅ Configuration loaded from env-config: ${BACKEND_API_URL}`;
+                statusElement.className = 'text-success';
                 console.log('Configuration loaded from env-config:', BACKEND_API_URL);
                 return;
             }
@@ -64,6 +86,8 @@ async function loadConfiguration() {
         console.log('Could not load configuration from env-config:', error.message);
     }
     
+    statusElement.innerHTML = 'No pre-configured backend URL found, will use auto-discovery';
+    statusElement.className = 'text-warning';
     console.log('No pre-configured backend URL found, will use auto-discovery');
 }
 
@@ -118,7 +142,7 @@ async function discoverFromHealthEndpoint() {
         `${window.location.origin.replace(/:\d+/, ':80')}/api`,
         `${window.location.origin.replace(/:\d+/, ':8080')}/api`,
         
-        // Common internal ALB patterns
+        // Common internal ALB patterns (add http:// if missing)
         `http://internal-${window.location.hostname}/api`,
         `http://app.${window.location.hostname}/api`,
         `http://api.${window.location.hostname}/api`,
@@ -127,6 +151,10 @@ async function discoverFromHealthEndpoint() {
         // AWS ALB common patterns
         `http://${window.location.hostname.replace('web-', 'app-')}/api`,
         `http://${window.location.hostname.replace('frontend-', 'backend-')}/api`,
+        
+        // Common AWS ALB patterns
+        'http://internal-*-ap-south-1.elb.amazonaws.com/api',
+        'http://*-ap-south-1.elb.amazonaws.com/api',
     ];
     
     for (const url of testUrls) {
@@ -217,14 +245,20 @@ function getIntelligentFallback() {
         return 'http://localhost/api';
     }
     
+    // If we're on an EC2 instance, try to discover the internal ALB
+    if (hostname.includes('compute.internal') || hostname.includes('ec2.internal')) {
+        // Try to get the internal ALB DNS from metadata
+        return 'http://internal-three-tier-app-app-alb.ap-south-1.elb.amazonaws.com/api';
+    }
+    
     // AWS ALB pattern detection
     if (hostname.includes('elb.amazonaws.com')) {
-        // Replace web with app in ALB hostname
+        // We're probably on the web ALB, so the app ALB should be internal
         return hostname.replace('web', 'app').replace('frontend', 'backend') + '/api';
     }
     
-    // Default fallback
-    return `${window.location.origin}/api`;
+    // Default fallback - try to construct based on common pattern
+    return `http://internal-${hostname}/api`;
 }
 
 // Enhanced API call with retry and discovery
@@ -268,6 +302,11 @@ async function apiCall(endpoint, options = {}) {
                 const text = await response.text();
                 console.warn(`Non-JSON response from ${url}:`, text);
                 
+                // If we got HTML, it might be a load balancer error page
+                if (contentType && contentType.includes('text/html')) {
+                    throw new Error(`Received HTML instead of JSON. The backend might not be available at ${url}`);
+                }
+                
                 // Try to parse as JSON anyway (some APIs don't set proper content-type)
                 try {
                     data = JSON.parse(text);
@@ -285,21 +324,10 @@ async function apiCall(endpoint, options = {}) {
         } catch (error) {
             console.error(`API call failed (attempt ${attempt}):`, error);
             
-            // If it's a CORS error, we need to handle it differently
-            if (error.message.includes('CORS') || error.message.includes('NetworkError') || error.message.includes('Failed to fetch')) {
-                console.error('Network error detected. Trying without CORS mode.');
-                
-                // Try without CORS mode
-                try {
-                    const simpleUrl = `${BACKEND_API_URL}${endpoint}`;
-                    const simpleResponse = await fetch(simpleUrl, { 
-                        method: 'GET',
-                        mode: 'no-cors'
-                    });
-                    console.log('Simple fetch response:', simpleResponse);
-                } catch (simpleError) {
-                    console.error('Simple fetch also failed:', simpleError);
-                }
+            // Reset the backend URL if it's clearly wrong
+            if (error.message.includes('HTML instead of JSON') || error.message.includes('Expected JSON')) {
+                BACKEND_API_URL = '';
+                CONFIG_LOADED = false;
             }
             
             if (attempt === maxRetries) {
@@ -321,7 +349,9 @@ function showError(context, error) {
     let errorMessage = error.message;
     
     // Provide more user-friendly error messages
-    if (error.message.includes('CORS') || error.message.includes('NetworkError') || error.message.includes('Failed to fetch')) {
+    if (error.message.includes('HTML instead of JSON')) {
+        errorMessage = 'Backend server not responding correctly. Please check if the backend is running.';
+    } else if (error.message.includes('CORS') || error.message.includes('NetworkError') || error.message.includes('Failed to fetch')) {
         errorMessage = 'Connection error. Please check if the backend server is running and accessible.';
     }
     

@@ -2,7 +2,7 @@
 # Web Tier Outputs
 ##############################################
 
-output "web_alb_dns_name" {
+output "web_alb_dns" {
   description = "DNS name of the internet-facing Web ALB"
   value       = aws_lb.web.dns_name
 }
@@ -21,7 +21,7 @@ output "web_target_group_arn" {
 # App Tier Outputs
 ##############################################
 
-output "app_alb_dns_name" {
+output "app_alb_dns" {
   description = "DNS name of the internal App ALB"
   value       = aws_lb.app.dns_name
 }
