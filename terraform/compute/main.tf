@@ -64,7 +64,7 @@ resource "aws_lb_listener" "web" {
 ##############################################
 resource "aws_launch_template" "web" {
   name_prefix   = "${var.project_name}-web-"
-  image_id      = file("${path.module}/ami_ids/frontend_ami.txt")
+  image_id      = trimspace(file("${path.module}/ami_ids/frontend_ami.txt"))
   instance_type = var.web_instance_type
   key_name      = var.key_name
 
@@ -74,9 +74,9 @@ resource "aws_launch_template" "web" {
   }
 
   user_data = base64encode(templatefile("${path.module}/web_user_data.sh", {
-    project_name = var.project_name
-    app_alb_dns  = aws_lb.app.dns_name  # Make sure this is correct
-    environment  = var.environment      # This was missing!
+    project_name     = var.project_name
+    backend_alb_dns  = aws_lb.app.dns_name   # 👈 renamed for clarity
+    environment      = var.environment
   }))
 
   tag_specifications {
@@ -88,7 +88,10 @@ resource "aws_launch_template" "web" {
       Tier        = "web"
     }
   }
+
+  depends_on = [aws_lb.app] # ensure backend ALB exists
 }
+
 
 resource "aws_autoscaling_group" "web" {
   name                = "${var.project_name}-web-asg"
@@ -187,7 +190,7 @@ resource "aws_lb_listener" "app" {
 ##############################################
 resource "aws_launch_template" "app" {
   name_prefix   = "${var.project_name}-app-"
-  image_id      = file("${path.module}/ami_ids/backend_ami.txt")
+  image_id      = trimspace(file("${path.module}/ami_ids/backend_ami.txt"))
   instance_type = var.app_instance_type
   key_name      = var.key_name
 
@@ -215,7 +218,6 @@ resource "aws_launch_template" "app" {
     }
   }
 
-  # Add depends_on at the launch template level
   depends_on = [data.terraform_remote_state.database]
 }
 
