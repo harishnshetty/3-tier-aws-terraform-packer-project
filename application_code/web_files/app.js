@@ -1,7 +1,6 @@
 // Global configuration
 let BACKEND_API_URL = '';
-let API_DISCOVERY_ATTEMPTS = 0;
-const MAX_DISCOVERY_ATTEMPTS = 3;
+let CONFIG_LOADED = false;
 
 // DOM Ready
 document.addEventListener('DOMContentLoaded', function() {
@@ -10,6 +9,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
 async function initializeApp() {
     console.log('Initializing Three-Tier Web Application');
+    
+    // Load configuration first
+    await loadConfiguration();
     
     // Auto-detect backend API URL
     await autoDetectBackendUrl();
@@ -21,17 +23,67 @@ async function initializeApp() {
     
     // Load initial data
     checkHealth();
+    loadUsers();
+    loadProducts();
+    loadOrders();
+    loadUsersForOrderForm();
+}
+
+// Load configuration from multiple sources
+async function loadConfiguration() {
+    // Try to load from config.js first
+    if (window.APP_CONFIG && window.APP_CONFIG.API_BASE_URL) {
+        BACKEND_API_URL = window.APP_CONFIG.API_BASE_URL;
+        CONFIG_LOADED = true;
+        console.log('Configuration loaded from config.js:', BACKEND_API_URL);
+        return;
+    }
+    
+    // Try to load from meta tag
+    const metaTag = document.querySelector('meta[name="backend-api-url"]');
+    if (metaTag && metaTag.content && metaTag.content !== 'http://APP_ALB_DNS_PLACEHOLDER/api') {
+        BACKEND_API_URL = metaTag.content;
+        CONFIG_LOADED = true;
+        console.log('Configuration loaded from meta tag:', BACKEND_API_URL);
+        return;
+    }
+    
+    // Try to load from env-config endpoint
+    try {
+        const response = await fetch('/env-config');
+        if (response.ok) {
+            const config = await response.json();
+            if (config.backendUrl) {
+                BACKEND_API_URL = config.backendUrl;
+                CONFIG_LOADED = true;
+                console.log('Configuration loaded from env-config:', BACKEND_API_URL);
+                return;
+            }
+        }
+    } catch (error) {
+        console.log('Could not load configuration from env-config:', error.message);
+    }
+    
+    console.log('No pre-configured backend URL found, will use auto-discovery');
 }
 
 // Enhanced auto-detection with multiple strategies
 async function autoDetectBackendUrl() {
     const statusElement = document.getElementById('api-config-status');
+    
+    // If we already have a configured URL, use it
+    if (CONFIG_LOADED && BACKEND_API_URL) {
+        statusElement.innerHTML = `✅ Using configured backend: ${BACKEND_API_URL}`;
+        statusElement.className = 'text-success';
+        console.log(`Using configured backend API: ${BACKEND_API_URL}`);
+        return;
+    }
+    
     statusElement.innerHTML = 'Auto-detecting backend API...';
     statusElement.className = 'text-info';
     
     // Try different discovery strategies
     const discoveryStrategies = [
-        discoverFromMetaTags,
         discoverFromHealthEndpoint,
         discoverFromCommonPatterns,
         discoverFromEnvironment
@@ -56,23 +108,7 @@ async function autoDetectBackendUrl() {
     console.log(`Using fallback API: ${fallbackUrl}`);
 }
 
-// Strategy 1: Check for meta tags or configuration in HTML
-async function discoverFromMetaTags() {
-    // Check for meta tag with backend URL
-    const metaTag = document.querySelector('meta[name="backend-api-url"]');
-    if (metaTag) {
-        return metaTag.getAttribute('content');
-    }
-    
-    // Check for global config variable
-    if (window.APP_CONFIG && window.APP_CONFIG.API_BASE_URL) {
-        return window.APP_CONFIG.API_BASE_URL;
-    }
-    
-    return null;
-}
-
-// Strategy 2: Try common health endpoints
+// Strategy 1: Try common health endpoints
 async function discoverFromHealthEndpoint() {
     const testUrls = [
         // Same server different path (common in dev)
@@ -116,7 +152,7 @@ async function discoverFromHealthEndpoint() {
     return null;
 }
 
-// Strategy 3: Try common backend URL patterns
+// Strategy 2: Try common backend URL patterns
 async function discoverFromCommonPatterns() {
     const commonPatterns = [
         // Relative path (if served from same server)
@@ -154,7 +190,7 @@ async function discoverFromCommonPatterns() {
     return null;
 }
 
-// Strategy 4: Try to discover from environment
+// Strategy 3: Try to discover from environment
 async function discoverFromEnvironment() {
     // Try to get backend URL from server-side environment
     try {
@@ -503,6 +539,7 @@ async function handleOrderSubmit(event) {
     
     const userSelect = document.getElementById('order-user');
     const totalInput = document.getElementById('order-total');
+    const statusSelect = document.getElementById('order-status');
     
     try {
         const result = await apiCall('/orders', {
@@ -510,7 +547,7 @@ async function handleOrderSubmit(event) {
             body: {
                 user_id: parseInt(userSelect.value),
                 total_amount: parseFloat(totalInput.value),
-                status: 'pending'
+                status: statusSelect.value
             }
         });
         
@@ -518,6 +555,7 @@ async function handleOrderSubmit(event) {
             alert('Order created successfully!');
             userSelect.value = '';
             totalInput.value = '';
+            statusSelect.value = 'pending';
             loadOrders();
         }
     } catch (error) {
@@ -544,35 +582,9 @@ async function testBackendConnectivity() {
             console.log('Health data:', data);
         }
         
-        // Test CORS with OPTIONS request
-        try {
-            const optionsResponse = await fetch(`${BACKEND_API_URL}/health`, {
-                method: 'OPTIONS',
-                mode: 'cors',
-                credentials: 'omit'
-            });
-            
-            console.log('OPTIONS response:', optionsResponse.status, optionsResponse.statusText);
-            console.log('CORS headers:');
-            ['access-control-allow-origin', 'access-control-allow-methods', 'access-control-allow-headers'].forEach(header => {
-                console.log(`  ${header}:`, optionsResponse.headers.get(header));
-            });
-        } catch (optionsError) {
-            console.log('OPTIONS request failed (may be normal):', optionsError.message);
-        }
-        
         return true;
     } catch (error) {
         console.error('Backend connectivity test failed:', error);
         return false;
     }
 }
-
-// Run connectivity test on startup
-setTimeout(() => {
-    testBackendConnectivity();
-    loadUsers();
-    loadProducts();
-    loadOrders();
-    loadUsersForOrderForm();
-}, 1000);
