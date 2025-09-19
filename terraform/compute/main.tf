@@ -88,6 +88,7 @@ resource "aws_launch_template" "web" {
       Tier        = "web"
     }
   }
+  depends_on = [aws_lb.app]
 }
 
 resource "aws_autoscaling_group" "web" {

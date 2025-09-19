@@ -18,6 +18,8 @@ git clone https://github.com/harishnshetty/3-tier-aws-terraform-packer-project.g
 rm -rf /var/www/html/*
 cp -r 3-tier-aws-terraform-packer-project/application_code/web_files/* /var/www/html/
 
+$backendUrl = 'http://${app_alb_dns}/api';
+
 # Create environment configuration endpoint
 cat > /var/www/html/env-config.php << EOF
 <?php
