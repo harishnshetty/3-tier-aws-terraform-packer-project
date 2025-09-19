@@ -3,7 +3,7 @@ set -e
 
 # Update and install dependencies
 dnf update -y
-dnf install -y httpd
+dnf install -y httpd php
 
 # Enable and start Apache
 systemctl enable httpd
@@ -18,28 +18,50 @@ git clone https://github.com/harishnshetty/3-tier-aws-terraform-packer-project.g
 rm -rf /var/www/html/*
 cp -r 3-tier-aws-terraform-packer-project/application_code/web_files/* /var/www/html/
 
-# Create a health check endpoint for frontend auto-detection
+# Create environment configuration endpoint
+cat > /var/www/html/env-config.php << 'EOL'
+<?php
+header('Content-Type: application/json');
+header('Access-Control-Allow-Origin: *');
+
+// Get backend URL from Terraform variables
+$backendUrl = 'http://${app_alb_dns}';
+
+echo json_encode([
+    'backendUrl' => $backendUrl,
+    'environment' => '${environment}',
+    'project' => '${project_name}',
+    'timestamp' => date('c')
+]);
+?>
+EOL
+
+# Create a health check endpoint
 cat > /var/www/html/health.html << 'EOL'
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Health Check</title>
+    <title>Frontend Health Check</title>
     <meta name="robots" content="noindex,nofollow">
 </head>
 <body>
     <h1>Frontend Health Check</h1>
     <p>Status: OK</p>
-    <p>Server: $(hostname)</p>
-    <p>Time: $(date)</p>
+    <p>Server: <?php echo gethostname(); ?></p>
+    <p>Time: <?php echo date('Y-m-d H:i:s'); ?></p>
+    <p>Environment: <?php echo getenv('ENVIRONMENT') ?: 'development'; ?></p>
 </body>
 </html>
 EOL
+
+# Add meta tag with backend URL to HTML
+sed -i '/<head>/a \    <meta name="backend-api-url" content="http://${app_alb_dns}/api">' /var/www/html/index.html
 
 # Set proper permissions
 chown -R apache:apache /var/www/html
 chmod -R 755 /var/www/html
 
-# Configure Apache to allow CORS for API discovery
+# Configure Apache to allow CORS
 cat > /etc/httpd/conf.d/cors.conf << 'EOL'
 Header always set Access-Control-Allow-Origin "*"
 Header always set Access-Control-Allow-Methods "GET, POST, OPTIONS, PUT, DELETE"
@@ -53,4 +75,4 @@ echo "🎉 Frontend setup completed successfully!"
 echo "🌐 Server: $(hostname)"
 echo "📊 Environment: ${environment}"
 echo "🏷️ Project: ${project_name}"
-echo "🔗 Backend API will be auto-discovered by the frontend"
+echo "🔗 Backend API: http://${app_alb_dns}/api"

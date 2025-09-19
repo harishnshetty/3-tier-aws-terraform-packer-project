@@ -1,5 +1,7 @@
-// Global configuration - will be auto-detected
+// Global configuration
 let BACKEND_API_URL = '';
+let API_DISCOVERY_ATTEMPTS = 0;
+const MAX_DISCOVERY_ATTEMPTS = 3;
 
 // DOM Ready
 document.addEventListener('DOMContentLoaded', function() {
@@ -22,92 +24,230 @@ async function initializeApp() {
     loadUsersForOrderForm();
 }
 
-// Auto-detect backend API URL
+// Enhanced auto-detection with multiple strategies
 async function autoDetectBackendUrl() {
     const statusElement = document.getElementById('api-config-status');
-    
-    // Try multiple strategies to find the backend
-    const potentialUrls = [
-        // Strategy 1: Same origin different port (common for dev)
-        `${window.location.origin.replace(/:\d+/, ':80')}/api`,
-        
-        // Strategy 2: Relative path (if served from same server)
-        '/api',
-        
-        // Strategy 3: Common backend hostnames
-        'http://backend/api',
-        'http://app-alb/api',
-        'http://internal-app-alb/api',
-    ];
-    
     statusElement.innerHTML = 'Auto-detecting backend API...';
     statusElement.className = 'text-info';
     
-    for (const url of potentialUrls) {
+    // Get current host information
+    const currentHost = window.location.hostname;
+    const currentProtocol = window.location.protocol;
+    
+    // Try different discovery strategies
+    const discoveryStrategies = [
+        discoverFromMetaTags,
+        discoverFromHealthEndpoint,
+        discoverFromCommonPatterns,
+        discoverFromEnvironment
+    ];
+    
+    for (const strategy of discoveryStrategies) {
+        const url = await strategy();
+        if (url) {
+            BACKEND_API_URL = url;
+            statusElement.innerHTML = `✅ Backend detected: ${url}`;
+            statusElement.className = 'text-success';
+            console.log(`Using backend API: ${url}`);
+            return;
+        }
+    }
+    
+    // If all strategies fail, use intelligent fallback
+    const fallbackUrl = getIntelligentFallback();
+    BACKEND_API_URL = fallbackUrl;
+    statusElement.innerHTML = `⚠️ Using fallback: ${fallbackUrl}`;
+    statusElement.className = 'text-warning';
+    console.log(`Using fallback API: ${fallbackUrl}`);
+}
+
+// Strategy 1: Check for meta tags or configuration in HTML
+async function discoverFromMetaTags() {
+    // Check for meta tag with backend URL
+    const metaTag = document.querySelector('meta[name="backend-api-url"]');
+    if (metaTag) {
+        return metaTag.getAttribute('content');
+    }
+    
+    // Check for global config variable
+    if (window.APP_CONFIG && window.APP_CONFIG.API_BASE_URL) {
+        return window.APP_CONFIG.API_BASE_URL + '/api';
+    }
+    
+    return null;
+}
+
+// Strategy 2: Try common health endpoints
+async function discoverFromHealthEndpoint() {
+    const testUrls = [
+        // Same server different path (common in dev)
+        `${window.location.origin}/api/health`,
+        
+        // Same domain different port (common pattern)
+        `${window.location.origin.replace(/:\d+/, ':80')}/api/health`,
+        `${window.location.origin.replace(/:\d+/, ':8080')}/api/health`,
+        
+        // Common internal ALB patterns
+        `http://internal-${window.location.hostname}/api/health`,
+        `http://app.${window.location.hostname}/api/health`,
+        `http://api.${window.location.hostname}/api/health`,
+        `http://backend.${window.location.hostname}/api/health`,
+        
+        // AWS ALB common patterns
+        `http://${window.location.hostname.replace('web-', 'app-')}/api/health`,
+        `http://${window.location.hostname.replace('frontend-', 'backend-')}/api/health`,
+    ];
+    
+    for (const url of testUrls) {
         try {
-            console.log(`Testing backend URL: ${url}`);
-            const response = await fetch(`${url}/health`, {
+            console.log(`Testing health endpoint: ${url}`);
+            const response = await fetch(url, {
                 method: 'GET',
-                headers: { 'Content-Type': 'application/json' },
-                signal: AbortSignal.timeout(3000) // 3 second timeout
+                signal: AbortSignal.timeout(2000)
             });
             
             if (response.ok) {
-                BACKEND_API_URL = url;
-                statusElement.innerHTML = `✅ Backend detected: ${url}`;
-                statusElement.className = 'text-success';
-                console.log(`Using backend API: ${url}`);
-                return;
+                const data = await response.json();
+                if (data.service === 'api-backend') {
+                    return url.replace('/health', '');
+                }
             }
         } catch (error) {
-            console.log(`URL ${url} not available: ${error.message}`);
             // Continue to next URL
+            console.log(`Health check failed for ${url}: ${error.message}`);
         }
     }
     
-    // If no backend found, show error but continue
-    statusElement.innerHTML = '⚠️ Could not auto-detect backend API. Using fallback.';
-    statusElement.className = 'text-warning';
-    BACKEND_API_URL = `${window.location.origin.replace(/:\d+/, ':80')}/api`;
+    return null;
 }
 
-// API Helper Functions
-async function apiCall(endpoint, options = {}) {
-    if (!BACKEND_API_URL) {
-        await autoDetectBackendUrl();
+// Strategy 3: Try common backend URL patterns
+async function discoverFromCommonPatterns() {
+    const commonPatterns = [
+        // Relative path (if served from same server)
+        '/api',
+        
+        // Common backend hostnames
+        'http://backend/api',
+        'http://app-alb/api',
+        'http://internal-app-alb/api',
+        'http://app.internal/api',
+        'http://api.internal/api',
+        
+        // AWS-specific patterns
+        'http://app-alb-123456789.ap-south-1.elb.amazonaws.com/api',
+    ];
+    
+    for (const pattern of commonPatterns) {
+        try {
+            const testUrl = `${pattern}/health`;
+            console.log(`Testing pattern: ${testUrl}`);
+            const response = await fetch(testUrl, {
+                method: 'GET',
+                signal: AbortSignal.timeout(2000)
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                if (data.service === 'api-backend') {
+                    return pattern;
+                }
+            }
+        } catch (error) {
+            // Continue to next pattern
+            console.log(`Pattern ${pattern} failed: ${error.message}`);
+        }
     }
     
-    const url = `${BACKEND_API_URL}${endpoint}`;
-    
+    return null;
+}
+
+// Strategy 4: Try to discover from environment
+async function discoverFromEnvironment() {
+    // Try to get backend URL from server-side environment
     try {
-        const response = await fetch(url, {
-            headers: {
-                'Content-Type': 'application/json',
-                ...options.headers
-            },
-            ...options
-        });
-        
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+        const response = await fetch('/env-config');
+        if (response.ok) {
+            const config = await response.json();
+            if (config.backendUrl) {
+                return config.backendUrl;
+            }
         }
-        
-        return await response.json();
     } catch (error) {
-        console.error('API call failed:', error);
-        
-        // If API call fails, try to rediscover backend
-        if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-            await autoDetectBackendUrl();
-            // Retry the request once
-            return apiCall(endpoint, options);
+        // Ignore, this is optional
+    }
+    
+    return null;
+}
+
+// Intelligent fallback based on current environment
+function getIntelligentFallback() {
+    const hostname = window.location.hostname;
+    
+    // Local development
+    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '') {
+        return 'http://localhost:80/api';
+    }
+    
+    // AWS ALB pattern detection
+    if (hostname.includes('elb.amazonaws.com')) {
+        // Replace web with app in ALB hostname
+        return hostname.replace('web', 'app').replace('frontend', 'backend') + '/api';
+    }
+    
+    // Default fallback
+    return `${window.location.origin}/api`;
+}
+
+// Enhanced API call with retry and discovery
+async function apiCall(endpoint, options = {}) {
+    const maxRetries = 2;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            if (!BACKEND_API_URL) {
+                await autoDetectBackendUrl();
+            }
+            
+            const url = `${BACKEND_API_URL}${endpoint}`;
+            console.log(`API Call (attempt ${attempt}): ${url}`);
+            
+            const response = await fetch(url, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...options.headers
+                },
+                ...options
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            return await response.json();
+            
+        } catch (error) {
+            console.error(`API call failed (attempt ${attempt}):`, error);
+            
+            if (attempt === maxRetries) {
+                // Last attempt failed, try to rediscover backend
+                BACKEND_API_URL = ''; // Reset to force rediscovery
+                if (API_DISCOVERY_ATTEMPTS < MAX_DISCOVERY_ATTEMPTS) {
+                    API_DISCOVERY_ATTEMPTS++;
+                    await autoDetectBackendUrl();
+                    // Retry the request
+                    continue;
+                }
+                throw error;
+            }
+            
+            // Wait before retrying
+            await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
         }
-        
-        throw error;
     }
 }
 
-// Health Check
+// Health Check with better error handling
 async function checkHealth() {
     try {
         const healthStatus = document.getElementById('health-status');
@@ -137,9 +277,14 @@ async function checkHealth() {
         document.getElementById('server-info').textContent = data.server;
         
     } catch (error) {
-        document.getElementById('health-status').innerHTML = 
-            `<span class="text-danger">Health check failed: ${error.message}</span>`;
-        document.getElementById('health-status').className = 'health-error';
+        const healthStatus = document.getElementById('health-status');
+        healthStatus.innerHTML = `
+            <span class="text-danger">
+                Health check failed: ${error.message}<br>
+                <small>Backend API: ${BACKEND_API_URL || 'Not discovered'}</small>
+            </span>
+        `;
+        healthStatus.className = 'health-error';
     }
 }
 
